@@ -26,7 +26,6 @@ import (
 	"github.com/spacemeshos/go-spacemesh/sync"
 	"github.com/spacemeshos/go-spacemesh/tortoise"
 	"github.com/spacemeshos/go-spacemesh/turbohare"
-	"github.com/spacemeshos/go-spacemesh/version"
 	"github.com/spacemeshos/post/shared"
 	"go.uber.org/zap"
 	"io/ioutil"
@@ -100,7 +99,11 @@ var VersionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version info",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(version.Version)
+		fmt.Print(cmdp.Version)
+		if cmdp.Commit != "" {
+			fmt.Printf("+%s", cmdp.Commit)
+		}
+		fmt.Println()
 	},
 }
 
@@ -504,13 +507,13 @@ func (app *SpacemeshApp) initServices(nodeID types.NodeId,
 	eValidator := oracle.NewBlockEligibilityValidator(layerSize, uint32(app.Config.GenesisActiveSet), layersPerEpoch, atxdb, beaconProvider, BLS381.Verify2, app.addLogger(BlkEligibilityLogger, lg))
 
 	var msh *mesh.Mesh
-	var trtl *tortoise.Algorithm
+	var trtl tortoise.Tortoise
 	if mdb.PersistentData() {
-		trtl = tortoise.NewRecoveredAlgorithm(mdb, app.addLogger(TrtlLogger, lg))
+		trtl = tortoise.NewRecoveredTortoise(mdb, app.addLogger(TrtlLogger, lg))
 		msh = mesh.NewRecoveredMesh(mdb, atxdb, app.Config.REWARD, trtl, app.txPool, atxpool, processor, app.addLogger(MeshLogger, lg))
 		go msh.CacheWarmUp()
 	} else {
-		trtl = tortoise.NewAlgorithm(int(layerSize), mdb, app.Config.Hdist, app.addLogger(TrtlLogger, lg))
+		trtl = tortoise.NewTortoise(int(layerSize), mdb, app.Config.Hdist, app.addLogger(TrtlLogger, lg))
 		msh = mesh.NewMesh(mdb, atxdb, app.Config.REWARD, trtl, app.txPool, atxpool, processor, app.addLogger(MeshLogger, lg))
 		app.setupGenesis(processor, msh)
 	}
@@ -628,6 +631,21 @@ func (app *SpacemeshApp) HareFactory(mdb *mesh.MeshDB, swarm service.Service, sg
 	return ha
 }
 
+// travis has a 10 minutes timeout
+// this ensures we print something before the timeout
+func (app *SpacemeshApp) patchTravisTimeout() {
+	ticker := time.NewTimer(5 * time.Minute)
+	for {
+		select {
+		case <-ticker.C:
+			fmt.Printf("Travis Patch\n")
+			ticker = time.NewTimer(5 * time.Minute)
+		case <-app.term:
+			return
+		}
+	}
+}
+
 func (app *SpacemeshApp) startServices() {
 	app.blockListener.Start()
 	app.syncer.Start()
@@ -655,6 +673,7 @@ func (app *SpacemeshApp) startServices() {
 	app.atxBuilder.Start()
 	app.clock.StartNotifying()
 	go app.checkTimeDrifts()
+	go app.patchTravisTimeout()
 }
 
 func (app *SpacemeshApp) stopServices() {
@@ -841,7 +860,7 @@ func (app *SpacemeshApp) Start(cmd *cobra.Command, args []string) {
 		log.Panic("Could not retrieve identity err=%v", err)
 	}
 
-	poetClient := activation.NewHTTPPoetClient(app.Config.PoETServer, cmdp.Ctx)
+	poetClient := activation.NewHTTPPoetClient(cmdp.Ctx, app.Config.PoETServer)
 
 	rng := amcl.NewRAND()
 	pub := app.edSgn.PublicKey().Bytes()
