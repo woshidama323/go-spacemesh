@@ -81,13 +81,7 @@ func JSONLog(b bool) {
 func NewWithLevel(module string, level zap.AtomicLevel, hooks ...func(zapcore.Entry) error) Log {
 	consoleSyncer := zapcore.AddSync(os.Stdout)
 	enc := encoder()
-
-	// Configure an enabler fn based on the input level
-	enablerFn := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl >= level.Level()
-	})
-
-	consoleCore := zapcore.NewCore(enc, consoleSyncer, enablerFn)
+	consoleCore := zapcore.NewCore(enc, consoleSyncer, zap.LevelEnablerFunc(level.Enabled))
 	core := zapcore.RegisterHooks(consoleCore, hooks...)
 	log := zap.New(core).Named(module)
 	return Log{log, log.Sugar(), &level}
