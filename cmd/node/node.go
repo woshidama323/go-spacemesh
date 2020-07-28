@@ -276,13 +276,11 @@ func (app *SpacemeshApp) Initialize(cmd *cobra.Command, args []string) (err erro
 
 // setupLogging configured the app logging system.
 func (app *SpacemeshApp) setupLogging() {
-
 	if app.Config.TestMode {
 		log.JSONLog(true)
 	}
 
 	// app-level logging
-	//log.InitSpacemeshLoggingSystem(app.Config.DataDir(), "spacemesh.log")
 	log.InitSpacemeshLoggingSystemWithHooks(func(entry zapcore.Entry) error {
 		// If we report anything less than this we'll end up in an infinite loop
 		if entry.Level >= zapcore.ErrorLevel {
@@ -370,7 +368,6 @@ func (weakCoinStub) GetResult() bool {
 }
 
 func (app *SpacemeshApp) addLogger(name string, logger log.Log) log.Log {
-	log.Level()
 	lvl := zap.NewAtomicLevel()
 	var err error
 
@@ -433,6 +430,70 @@ func (app *SpacemeshApp) addLogger(name string, logger log.Log) log.Log {
 	}
 	app.loggers[name] = &lvl
 	return logger.SetLevel(&lvl).WithName(name)
+}
+
+func (app *SpacemeshApp) addLoggerNew(name string) log.Log {
+	lvl := zap.NewAtomicLevel()
+	var err error
+
+	switch name {
+	case AppLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.AppLoggerLevel))
+	case P2PLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.P2PLoggerLevel))
+	case PostLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.PostLoggerLevel))
+	case StateDbLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.StateDbLoggerLevel))
+	case StateLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.StateLoggerLevel))
+	case AtxDbStoreLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.AtxDbStoreLoggerLevel))
+	case PoetDbStoreLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.PoetDbStoreLoggerLevel))
+	case StoreLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.StoreLoggerLevel))
+	case PoetDbLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.PoetDbLoggerLevel))
+	case MeshDBLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.MeshDBLoggerLevel))
+	case TrtlLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.TrtlLoggerLevel))
+	case AtxDbLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.AtxDbLoggerLevel))
+	case BlkEligibilityLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.BlkEligibilityLoggerLevel))
+	case MeshLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.MeshLoggerLevel))
+	case SyncLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.SyncLoggerLevel))
+	case BlockOracle:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.BlockOracleLevel))
+	case HareOracleLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.HareOracleLoggerLevel))
+	case HareBeaconLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.HareBeaconLoggerLevel))
+	case HareLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.HareLoggerLevel))
+	case BlockBuilderLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.BlockBuilderLoggerLevel))
+	case BlockListenerLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.BlockListenerLoggerLevel))
+	case PoetListenerLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.PoetListenerLoggerLevel))
+	case NipstBuilderLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.NipstBuilderLoggerLevel))
+	case AtxBuilderLogger:
+		err = lvl.UnmarshalText([]byte(app.Config.LOGGING.AtxBuilderLoggerLevel))
+	default:
+		lvl.SetLevel(log.Level())
+	}
+
+	if err != nil {
+		log.Error("cannot parse logging for %v error %v", name, err)
+		lvl.SetLevel(log.Level())
+	}
+	return log.NewWithLevel(name, lvl)
 }
 
 // SetLogLevel sets the specific log level for the specified logger name, Log level can be WARN, INFO, DEBUG
@@ -529,11 +590,11 @@ func (app *SpacemeshApp) initServices(nodeID types.NodeID,
 	var trtl tortoise.Tortoise
 	if mdb.PersistentData() {
 		trtl = tortoise.NewRecoveredTortoise(mdb, app.addLogger(TrtlLogger, lg))
-		msh = mesh.NewRecoveredMesh(mdb, atxdb, app.Config.REWARD, trtl, app.txPool, atxpool, processor, app.addLogger(MeshLogger, lg))
+		msh = mesh.NewRecoveredMesh(mdb, atxdb, app.Config.REWARD, trtl, app.txPool, atxpool, processor, app.addLoggerNew(MeshLogger))
 		go msh.CacheWarmUp(app.Config.LayerAvgSize)
 	} else {
 		trtl = tortoise.NewTortoise(int(layerSize), mdb, app.Config.Hdist, app.addLogger(TrtlLogger, lg))
-		msh = mesh.NewMesh(mdb, atxdb, app.Config.REWARD, trtl, app.txPool, atxpool, processor, app.addLogger(MeshLogger, lg))
+		msh = mesh.NewMesh(mdb, atxdb, app.Config.REWARD, trtl, app.txPool, atxpool, processor, app.addLoggerNew(MeshLogger))
 		app.setupGenesis(processor, msh)
 	}
 

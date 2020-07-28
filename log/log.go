@@ -3,13 +3,12 @@
 package log
 
 import (
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
 	"os"
 	"path/filepath"
-
-	"go.uber.org/zap"
 )
 
 const mainLoggerName = "00000.defaultLogger"
@@ -33,7 +32,6 @@ func logLevel() zap.LevelEnablerFunc {
 		return debugLevel
 	}
 	return infoLevel
-
 }
 
 // Level returns the zapcore level of logging.
@@ -79,6 +77,22 @@ func JSONLog(b bool) {
 	jsonLog = b
 }
 
+// NewWithLevel creates a logger with a fixed level
+func NewWithLevel(module string, level zap.AtomicLevel, hooks ...func(zapcore.Entry) error) Log {
+	consoleSyncer := zapcore.AddSync(os.Stdout)
+	enc := encoder()
+
+	// Configure an enabler fn based on the input level
+	enablerFn := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return lvl >= level.Level()
+	})
+
+	consoleCore := zapcore.NewCore(enc, consoleSyncer, enablerFn)
+	core := zapcore.RegisterHooks(consoleCore, hooks...)
+	log := zap.New(core).Named(module)
+	return Log{log, log.Sugar(), &level}
+}
+
 // New creates a logger for a module. e.g. p2p instance logger.
 func New(module string, dataFolderPath string, logFileName string, hooks ...func(zapcore.Entry) error) Log {
 	var cores []zapcore.Core
@@ -104,7 +118,7 @@ func New(module string, dataFolderPath string, logFileName string, hooks ...func
 
 // NewDefault creates a Log without file output
 func NewDefault(module string) Log {
-	return New(module, "", "")
+	return NewWithLevel(module, zap.NewAtomicLevelAt(Level()))
 }
 
 // getBackendLevelWithFileBackend returns backends level including log file backend
@@ -123,14 +137,14 @@ func getFileWriter(dataFolderPath, logFileName string) io.Writer {
 }
 
 // InitSpacemeshLoggingSystem initializes app logging system.
-func InitSpacemeshLoggingSystem(string, string) {
+func InitSpacemeshLoggingSystem() {
 	AppLog = NewDefault(mainLoggerName)
 }
 
 // InitSpacemeshLoggingSystemWithHooks sets up a logging system with one or more
 // registered hooks
 func InitSpacemeshLoggingSystemWithHooks(hooks ...func(zapcore.Entry) error) {
-	AppLog = New(mainLoggerName, "", "", hooks...)
+	AppLog = NewWithLevel(mainLoggerName, zap.NewAtomicLevelAt(Level()), hooks...)
 }
 
 // public wrappers abstracting away logging lib impl
