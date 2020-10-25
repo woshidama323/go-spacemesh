@@ -61,17 +61,17 @@ spec:
   updateStrategy:
     type: RollingUpdate
 
-  volumeClaimTemplates:
-    - metadata:
-        name: volume
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        # if not specified it uses DefaultClass
-        storageClassName: elk-ssd
-        resources:
-          requests:
-            storage: 30Gi
+  #volumeClaimTemplates:
+  #  - metadata:
+  #      name: volume
+  #    spec:
+  #      accessModes:
+  #        - ReadWriteOnce
+  #      # if not specified it uses DefaultClass
+  #      storageClassName: elk-ssd
+  #      resources:
+  #        requests:
+  #          storage: 30Gi
 
   template:
     metadata:
@@ -112,6 +112,9 @@ spec:
         - name: tls
           secret:
             secretName: elasticsearch-master.tls
+        - name: volume
+          emptyDir: {}
+
 
       initContainers:
         - name: configure-sysctl
