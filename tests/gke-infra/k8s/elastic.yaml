@@ -1,0 +1,262 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: elasticsearch-master.tls
+data:
+  #elastic-certificate.crt: MIIDUDCCAjigAwIBAgIVAN5gdRxONYpueWmn+QsNHYsy1ntLMA0GCSqGSIb3DQEBCwUAMDQxMjAwBgNVBAMTKUVsYXN0aWMgQ2VydGlmaWNhdGUgVG9vbCBBdXRvZ2VuZXJhdGVkIENBMB4XDTIwMTAyNTIxMzUxOVoXDTIzMTAyNTIxMzUxOVowHzEdMBsGA1UEAxMUZWxhc3RpY3NlYXJjaC1tYXN0ZXIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCWcYR1M6LBZu/18AzcrnWWwnzYDVz+g7oUZ3IO97bnuPICWF6bkXv+UMCkD9Gs+GWmTMKVANap9P/vC+ShXaqJyAdr/dDYMOcxbg1TfqI+NMzUkpfQQBYb9Jj1s4OBdqkqyrFvBZ/BQ3ywmqe7+cu9huU7RL0FRUQr9j3aXJtgYTyOvO4UGsa6jdQonjKwJ43nrZ8W/0rshkpzIRwNvmxWdBE192jHx67BARgHz48IMVrgLVsm7bTMCcltOTLSPtOp+5QQ53uer5uXjTPUVC1XZDlIRz3xDZmbV/E3Vj2A99/a5MzCOXDtIP+DWABbOppwM0Qcre058PNOJDAhqozdAgMBAAGjbjBsMB0GA1UdDgQWBBQSNoXzeSAJ6V//W5FbtEw4ZkmXsDAfBgNVHSMEGDAWgBR3nBRDfmVA99VQUrgOn3BP3ABWGjAfBgNVHREEGDAWghRlbGFzdGljc2VhcmNoLW1hc3RlcjAJBgNVHRMEAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQBaK1Z0xgi1Xs/ZmEJlDfBTrqmgNN9HccGfVFzvq/OjYm1SUrtvZpOsdIlexOerwJM6jQNVUXmcjTWjOSOTgynU3tI7KOimfh0zCV1weiNHaOBng2BA23Cfkikz6FthnDqMAdcPRG3wLSJ1tQ4K96Attk6Nga6p87r5xCLWtnwdaDH7jXcqm+TgtoyZMTSqIm1m92QuJzSRSDihoPWrYhCaEPLS2jYlXXv5XxZAI4nGDwMFqCoysP2giIPxznvhgk+0+O3m3IcxGWZsNpCiY0Kskz1cPBzMMnECV0sGp1UAk+phjrJDFerx507MyxgGundUryXwnuKK2COtP0diyMzX
+  #elastic-certificate.pem: QmFnIEF0dHJpYnV0ZXMKICAgIGZyaWVuZGx5TmFtZTogZWxhc3RpY3NlYXJjaC1tYXN0ZXIKICAgIGxvY2FsS2V5SUQ6IDU0IDY5IDZEIDY1IDIwIDMxIDM2IDMwIDMzIDM2IDM2IDMxIDM3IDMyIDMwIDMwIDM0IDM2IApLZXkgQXR0cmlidXRlczogPE5vIEF0dHJpYnV0ZXM+Ci0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLQpNSUlFdlFJQkFEQU5CZ2txaGtpRzl3MEJBUUVGQUFTQ0JLY3dnZ1NqQWdFQUFvSUJBUUNXY1lSMU02TEJadS8xCjhBemNybldXd256WURWeitnN29VWjNJTzk3Ym51UElDV0Y2YmtYditVTUNrRDlHcytHV21UTUtWQU5hcDlQL3YKQytTaFhhcUp5QWRyL2REWU1PY3hiZzFUZnFJK05NelVrcGZRUUJZYjlKajFzNE9CZHFrcXlyRnZCWi9CUTN5dwptcWU3K2N1OWh1VTdSTDBGUlVRcjlqM2FYSnRnWVR5T3ZPNFVHc2E2amRRb25qS3dKNDNuclo4Vy8wcnNoa3B6CklSd052bXhXZEJFMTkyakh4NjdCQVJnSHo0OElNVnJnTFZzbTdiVE1DY2x0T1RMU1B0T3ArNVFRNTN1ZXI1dVgKalRQVVZDMVhaRGxJUnozeERabWJWL0UzVmoyQTk5L2E1TXpDT1hEdElQK0RXQUJiT3Bwd00wUWNyZTA1OFBOTwpKREFocW96ZEFnTUJBQUVDZ2dFQVVaNUdjVnRSS2tIUlg0a2JRVUo0MHhDeXNIZ1hncEV1aTlGUFpPVnBXcS9RCnhBcnpVTTBPQ3Z2K2QwT0p5cUI4YlV0cHFYTHFBd3pES1FvM3dIL1RmS3FEdEVmZ1hObXpJL01EMGM5NjcrcXYKVVlneVNxM3FFTUtUbFlFTmtGZ3pFTjhrZ2duNEVONnZNQlRIZVVqZEN2YTdPSHRqWFErbUczK2RNUEZhN2w4YgppN1h0NFNMRWN3SHl4RHZCNHJhYVp3dFUwUFYyaURobnZkV3dubHVwM3VST3Y4b2JuOEtmejdhSjRCTEtZUitNCjRmL2g4YS85T0FiQ0IvYmNDbVFGL0Eya3lwSlhjSTFZY1hBaGNGVGVrL0lEcUpkVUFqU2dFSW1FS3MzeEJiNkUKK3V6WGR2WTRFR0lqMEV1THQveE15b3B1SlpXM1liREFtQXZkdVh4b1ZRS0JnUURoSGc1V09XS2VlTTVscmhSQQpTalhZRVMrTkNhaTM3cHovV1p0dFFSR0ZWQ2owa3Frb3FXSzJNTHpDYXB3bGEyVExMcWI5eU43S1BMODBqT0U5CmRMQ0syYng1aUNrSHhKb0g1TkpWT055NEt1U3VkaEZaeDk2M0V6UEhqSytzRUUvK0Y5UFd1VXhaSXVtMUVQNVEKVndGQmVEWWk5Rkh3dDZEWnltNUw2cHRWMXdLQmdRQ3JGUGlETW1CR2tpZmd4WjRyenZ1c3B5NjBaZTBsaCtNegp6R1E0ZXM3ZThOcDdxK2RVUG5aQkdpemswZVRHNEV6MSswTk5vMlZWS2h1NjRXck5GaEtYUzB5UnFKRkhhZDlBCmk2MzdkRzYvQ0s0N0MvWjBOYTJQelNTWXppT2tmSk5GR3g0aWJNdENhUVVyWGl4TVJ0YmRzbHl5Nk0vbXRod0sKY2pRbmYySTBhd0tCZ1FERklEaVZzSEozS25veDk1bXNJays4QUhDUEpDSWx6a0NVS2JjOG1IbnJNcU1hWjBMUgpaR0lYLzkyS3NTaENiQ1E2OTRNclFEWTNDYksxSlpnbTVJT2pVcjhEL1FOUTFndTdWZGdJNEY0R3R5akF6SXFzCi82UTYxQW5IZDU1dElXdXFxTnJMY0Q4MjNxZWY4bDEvcEhCcEVBYjMzTkhUNURocC9pVlBQUVVBeVFLQmdHRUcKazZwVWQ2V09YbTlycERqVU9vZkFpUXhtZ2dnMitQUDNoeDlCQnZJSlJ0Kzhyb1ZvcDBoa3YvRkYyS214cS9RVgpmQ1liOU94SDVWSW5aWnJLV2VEVUk2aTRJU3lQTHI0OGVYK1NtUHhldi9GYzUza2d1RDVGNmV0L2ZWZGNEMm14CjUzVStua2dicDRMZzlkNk1qbTlOS0tXT3c5bmtqaUtlZ2xXa09OM2hBb0dBVnhhZUMycW1qUXdEbmZrZGdrdG8KRGpqRjBSUUZzME5MbGxzckFjZUs1bFFXY0xweHJZbHRmLzhNR3FMK2Q1Uy9Xb2t4ZVVYb3Z6TWJKV2RwMXNuTwovYXdYdU56ZGUwZFpwY0JGcFE0RXJwdDJiM29yMndHSXpqOHZJUXpISTg0MXpRRjBPdkVCRlhHKzZxc0thZFRSCjhNMjNyL0dwakZxYkNPY05tcndhdnU0PQotLS0tLUVORCBQUklWQVRFIEtFWS0tLS0tCkJhZyBBdHRyaWJ1dGVzCiAgICBmcmllbmRseU5hbWU6IGVsYXN0aWNzZWFyY2gtbWFzdGVyCiAgICBsb2NhbEtleUlEOiA1NCA2OSA2RCA2NSAyMCAzMSAzNiAzMCAzMyAzNiAzNiAzMSAzNyAzMiAzMCAzMCAzNCAzNiAKc3ViamVjdD1DTiA9IGVsYXN0aWNzZWFyY2gtbWFzdGVyCgppc3N1ZXI9Q04gPSBFbGFzdGljIENlcnRpZmljYXRlIFRvb2wgQXV0b2dlbmVyYXRlZCBDQQoKLS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURVRENDQWppZ0F3SUJBZ0lWQU41Z2RSeE9OWXB1ZVdtbitRc05IWXN5MW50TE1BMEdDU3FHU0liM0RRRUIKQ3dVQU1EUXhNakF3QmdOVkJBTVRLVVZzWVhOMGFXTWdRMlZ5ZEdsbWFXTmhkR1VnVkc5dmJDQkJkWFJ2WjJWdQpaWEpoZEdWa0lFTkJNQjRYRFRJd01UQXlOVEl4TXpVeE9Wb1hEVEl6TVRBeU5USXhNelV4T1Zvd0h6RWRNQnNHCkExVUVBeE1VWld4aGMzUnBZM05sWVhKamFDMXRZWE4wWlhJd2dnRWlNQTBHQ1NxR1NJYjNEUUVCQVFVQUE0SUIKRHdBd2dnRUtBb0lCQVFDV2NZUjFNNkxCWnUvMThBemNybldXd256WURWeitnN29VWjNJTzk3Ym51UElDV0Y2YgprWHYrVU1Da0Q5R3MrR1dtVE1LVkFOYXA5UC92QytTaFhhcUp5QWRyL2REWU1PY3hiZzFUZnFJK05NelVrcGZRClFCWWI5SmoxczRPQmRxa3F5ckZ2QlovQlEzeXdtcWU3K2N1OWh1VTdSTDBGUlVRcjlqM2FYSnRnWVR5T3ZPNFUKR3NhNmpkUW9uakt3SjQzbnJaOFcvMHJzaGtweklSd052bXhXZEJFMTkyakh4NjdCQVJnSHo0OElNVnJnTFZzbQo3YlRNQ2NsdE9UTFNQdE9wKzVRUTUzdWVyNXVYalRQVVZDMVhaRGxJUnozeERabWJWL0UzVmoyQTk5L2E1TXpDCk9YRHRJUCtEV0FCYk9wcHdNMFFjcmUwNThQTk9KREFocW96ZEFnTUJBQUdqYmpCc01CMEdBMVVkRGdRV0JCUVMKTm9YemVTQUo2Vi8vVzVGYnRFdzRaa21Yc0RBZkJnTlZIU01FR0RBV2dCUjNuQlJEZm1WQTk5VlFVcmdPbjNCUAozQUJXR2pBZkJnTlZIUkVFR0RBV2doUmxiR0Z6ZEdsamMyVmhjbU5vTFcxaGMzUmxjakFKQmdOVkhSTUVBakFBCk1BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQmFLMVoweGdpMVhzL1ptRUpsRGZCVHJxbWdOTjlIY2NHZlZGenYKcS9PalltMVNVcnR2WnBPc2RJbGV4T2Vyd0pNNmpRTlZVWG1jalRXak9TT1RneW5VM3RJN0tPaW1maDB6Q1YxdwplaU5IYU9CbmcyQkEyM0Nma2lrejZGdGhuRHFNQWRjUFJHM3dMU0oxdFE0Szk2QXR0azZOZ2E2cDg3cjV4Q0xXCnRud2RhREg3alhjcW0rVGd0b3laTVRTcUltMW05MlF1SnpTUlNEaWhvUFdyWWhDYUVQTFMyallsWFh2NVh4WkEKSTRuR0R3TUZxQ295c1AyZ2lJUHh6bnZoZ2srMCtPM20zSWN4R1dac05wQ2lZMEtza3oxY1BCek1NbkVDVjBzRwpwMVVBaytwaGpySkRGZXJ4NTA3TXl4Z0d1bmRVcnlYd251S0syQ090UDBkaXlNelgKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQpCYWcgQXR0cmlidXRlcwogICAgZnJpZW5kbHlOYW1lOiBjYQogICAgMi4xNi44NDAuMS4xMTM4OTQuNzQ2ODc1LjEuMTogPFVuc3VwcG9ydGVkIHRhZyA2PgpzdWJqZWN0PUNOID0gRWxhc3RpYyBDZXJ0aWZpY2F0ZSBUb29sIEF1dG9nZW5lcmF0ZWQgQ0EKCmlzc3Vlcj1DTiA9IEVsYXN0aWMgQ2VydGlmaWNhdGUgVG9vbCBBdXRvZ2VuZXJhdGVkIENBCgotLS0tLUJFR0lOIENFUlRJRklDQVRFLS0tLS0KTUlJRFNqQ0NBaktnQXdJQkFnSVZBSkZOckNqcVRtUzVjeVV5Q3FSUWw1V3gwK1ZTTUEwR0NTcUdTSWIzRFFFQgpDd1VBTURReE1qQXdCZ05WQkFNVEtVVnNZWE4wYVdNZ1EyVnlkR2xtYVdOaGRHVWdWRzl2YkNCQmRYUnZaMlZ1ClpYSmhkR1ZrSUVOQk1CNFhEVEl3TVRBeU5USXhNelV4T0ZvWERUSXpNVEF5TlRJeE16VXhPRm93TkRFeU1EQUcKQTFVRUF4TXBSV3hoYzNScFl5QkRaWEowYVdacFkyRjBaU0JVYjI5c0lFRjFkRzluWlc1bGNtRjBaV1FnUTBFdwpnZ0VpTUEwR0NTcUdTSWIzRFFFQkFRVUFBNElCRHdBd2dnRUtBb0lCQVFDSmhTZ0kwVVZReTJIMThiLzI1SGlkCnRuUDlSbm1aYTk1cTJaVjVtVDZNSzIwblA1M0FsSm54SzlQTmxnckIwMStaY2RKeVFlbWZnUWZvQlh6VzJwZ2YKYkNIMlV2bGNxdEQxa3pNV0Z2VmQ0Wjg5ZGdqNElVTm1nQ1FjbnhRL1N4WHM1bXUrK3Vza3hZLzZtRXlhVldLZwpZSHoweUVZenRyTi82d1p6SlJnN1JrK1FIK29nODRPbFVQVlpUV1E5OVFzeFRxU3dPeGNkVE13N21xOUk1S2pWCmdHdVV6cDNNd3RsWTZPbXY1MDVIdTQvaklHazdIb3d2elltcVdXZk5tMGo3UzhUeEY1NDFMWkVXRVd0VFhvWU0KeW1CTXdObEtuYjN1NnIxc2lCOTRzNHBZeElJdEpiVEgza044SlhyaWdxSEhBcEpkNGNxaXZvc0IvV3hJWWJ1cApBZ01CQUFHalV6QlJNQjBHQTFVZERnUVdCQlIzbkJSRGZtVkE5OVZRVXJnT24zQlAzQUJXR2pBZkJnTlZIU01FCkdEQVdnQlIzbkJSRGZtVkE5OVZRVXJnT24zQlAzQUJXR2pBUEJnTlZIUk1CQWY4RUJUQURBUUgvTUEwR0NTcUcKU0liM0RRRUJDd1VBQTRJQkFRQVRJWWQwbDhSdm1hZGRDSGsrNHBvMjY1L3h5dVJPT2g1ODY1UEFTQVoybk9mcQpEemV6TG4ybUp5S0ZLYkdMWndNNDdEbS9reFhIZHM4ZnVQTDZOYjdRaUZpZ0wxOHY0bUN0Q1JzQmFTV3RLU3FlClRGQndyaVpGb2NZc1JQdXdpWGNjM2FzcUFCMDhDNU53dDdKc29mdE9mREV1dUpMY2hGLzJoMkt1blBOQ3NPNksKcWpwaGM0MVc1RW9FUnRhWjZCQnJ0bHFOTVIxV2g5eHk5dVpoTUpRdGZGQ1Y3Nk4rdVhpRW1oYTdnOFVtZUlKaAo0a1RTSm85VEdSeUhpMy83RmlJSVJKMmxPUWprQ1ltRStKdk1ka2RETmNjR0VjbWdOeHd6ZWh6U0EyZUtWZmVvClRDZEQxdkk0ZU9QRGFObmM4Y045RW5oL0owTGl6UTNWWHZ5Qyt3ZHIKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+  elastic-certificates.p12: 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
+  #elastic-stack-ca.p12: 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
+#immutable: true
+
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: elk-ssd
+parameters:
+  type: pd-ssd
+provisioner: kubernetes.io/gce-pd
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: elasticsearch-master
+  labels:
+    app: "elasticsearch-master"
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  clusterIP: None # This is needed for statefulset hostnames like elasticsearch-0 to resolve
+  # Create endpoints also if the related pod isn't ready
+  publishNotReadyAddresses: true
+  selector:
+    app: "elasticsearch-master"
+  ports:
+    - name: http
+      port: 9200
+    - name: transport
+      port: 9300
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: elasticsearch-master
+  labels:
+    app: "elasticsearch-master"
+    group: "ELK"
+  annotations:
+    esMajorVersion: "7"
+spec:
+  serviceName: elasticsearch-master
+  replicas: 2
+  podManagementPolicy: Parallel
+
+  selector:
+    matchLabels:
+      app: "elasticsearch-master"
+
+  updateStrategy:
+    type: RollingUpdate
+
+  volumeClaimTemplates:
+    - metadata:
+        name: volume
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        # if not specified it uses DefaultClass
+        storageClassName: elk-ssd
+        resources:
+          requests:
+            storage: 30Gi
+
+  template:
+    metadata:
+      name: "elasticsearch-master"
+      labels:
+        app: "elasticsearch-master"
+      annotations:
+        {}
+
+    spec:
+      terminationGracePeriodSeconds: 120
+      enableServiceLinks: true
+
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+
+      #nodeSelector:
+      #  group: "ELK"
+
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              preference:
+                matchExpressions:
+                  - key: group
+                    operator: In
+                    values:
+                      - "ELK"
+      tolerations:
+        - key: "ELK-pool"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+
+      volumes:
+        - name: tls
+          secret:
+            secretName: elasticsearch-master.tls
+
+      initContainers:
+        - name: configure-sysctl
+          securityContext:
+            runAsUser: 0
+            privileged: true
+          image: "docker.elastic.co/elasticsearch/elasticsearch:7.9.2"
+          imagePullPolicy: "IfNotPresent"
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          resources:
+            {}
+
+      containers:
+        - name: "elasticsearch"
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "docker.elastic.co/elasticsearch/elasticsearch:7.9.2"
+          imagePullPolicy: "IfNotPresent"
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  #!/usr/bin/env bash -e
+                  # If the node is starting up wait for the cluster to be ready (request params: "wait_for_status=green&timeout=1s" )
+                  # Once it has started only check that the node itself is responding
+                  START_FILE=/tmp/.es_start_file
+
+                  http () {
+                    local path="${1}"
+                    local args="${2}"
+                    set -- -XGET -s
+
+                    if [ "$args" != "" ]; then
+                      set -- "$@" $args
+                    fi
+
+                    if [ -n "${ELASTIC_USERNAME}" ] && [ -n "${ELASTIC_PASSWORD}" ]; then
+                      set -- "$@" -u "${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}"
+                    fi
+
+                    curl --connect-timeout 10 --output /dev/null -k "$@" "http://127.0.0.1:9200${path}"
+                  }
+
+                  if [ -f "${START_FILE}" ]; then
+                    echo 'Elasticsearch is already running, lets check the node is healthy'
+                    HTTP_CODE=$(http "/" "-w %{http_code}")
+                    RC=$?
+                    if [[ ${RC} -ne 0 ]]; then
+                      echo "curl --output /dev/null -k -XGET -s -w '%{http_code}' \${BASIC_AUTH} http://127.0.0.1:9200/ failed with RC ${RC}"
+                      exit ${RC}
+                    fi
+                    # ready if HTTP code 200, 503 is tolerable if ES version is 6.x
+                    if [[ ${HTTP_CODE} == "200" ]]; then
+                      exit 0
+                    elif [[ ${HTTP_CODE} == "503" && "8" == "6" ]]; then
+                      exit 0
+                    else
+                      echo "curl --output /dev/null -k -XGET -s -w '%{http_code}' \${BASIC_AUTH} http://127.0.0.1:9200/ failed with HTTP code ${HTTP_CODE}"
+                      exit 1
+                    fi
+
+                  else
+                    echo 'Waiting for elasticsearch cluster to become ready (request params: "wait_for_status=green&timeout=1s" )'
+                    if http "/_cluster/health?wait_for_status=green&timeout=5s" "--fail" ; then
+                      touch ${START_FILE}
+                      exit 0
+                    else
+                      echo 'Cluster is not yet ready (request params: "wait_for_status=green&timeout=1s" )'
+                      exit 1
+                    fi
+                  fi
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 3
+            timeoutSeconds: 5
+          ports:
+            - name: http
+              containerPort: 9200
+            - name: transport
+              containerPort: 9300
+          resources:
+            limits:
+              cpu: 4000m
+              memory: 20Gi
+            requests:
+              cpu: 100m
+              memory: 8Gi
+          env:
+            - name: node.name
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: cluster.initial_master_nodes
+              value: "elasticsearch-master-0,elasticsearch-master-1"
+            - name: discovery.seed_hosts
+              value: "elasticsearch-master-0.elasticsearch-master"
+            - name: cluster.name
+              value: "elasticsearch"
+            - name: network.host
+              value: "0.0.0.0"
+            - name: ES_JAVA_OPTS
+              value: "-Xmx10g -Xms10g"
+            - name: node.data
+              value: "true"
+            - name: node.ingest
+              value: "true"
+            - name: node.master
+              value: "true"
+            - name: rest.action.multi.allow_explicit_index
+              value: "true"
+            - name: ELASTIC_USERNAME
+              value: elastic
+            - name: ELASTIC_PASSWORD
+              value: gavradon
+            - name: xpack.security.enabled
+              value: "true"
+            - name: xpack.monitoring.enabled
+              value: "true"
+            - name: xpack.monitoring.collection.enabled
+              value: "true"
+            - name: xpack.security.transport.ssl.enabled
+              value: "true"
+            - name: xpack.security.transport.ssl.verification_mode
+              value: "certificate"
+            - name: xpack.security.transport.ssl.keystore.path
+              value: "/usr/share/elasticsearch/config/certs/elastic-certificates.p12"
+            - name: xpack.security.transport.ssl.truststore.path
+              value: "/usr/share/elasticsearch/config/certs/elastic-certificates.p12"
+            #- name: xpack.security.http.ssl.enabled
+            #  value: "true"
+            #- name: xpack.security.http.ssl.truststore.path
+            #  value: "/usr/share/elasticsearch/config/certs/elastic-certificates.p12"
+            #- name: xpack.security.http.ssl.keystore.path
+            #  value: "/usr/share/elasticsearch/config/certs/elastic-certificates.p12"
+
+          volumeMounts:
+            - name: volume
+              mountPath: /usr/share/elasticsearch/data
+            - name: tls
+              mountPath: /usr/share/elasticsearch/config/certs
+              readOnly: true
