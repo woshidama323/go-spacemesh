@@ -49,18 +49,6 @@ spec:
   updateStrategy:
     type: RollingUpdate
 
-  #volumeClaimTemplates:
-  #  - metadata:
-  #      name: volume
-  #    spec:
-  #      accessModes:
-  #        - ReadWriteOnce
-  #      # if not specified it uses DefaultClass
-  #      storageClassName: elk-ssd
-  #      resources:
-  #        requests:
-  #          storage: 30Gi
-
   template:
     metadata:
       name: "elasticsearch-master"
