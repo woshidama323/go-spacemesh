@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: elasticsearch-master
-  namespace: NAMESPACE
   labels:
     heritage: "Helm"
     chart: "elasticsearch"
@@ -25,7 +24,7 @@ spec:
         accessModes:
         - ReadWriteOnce
         # if not specified it uses DefaultClass
-        # storageClassName: hostpath
+        storageClassName: ssd
         resources:
           requests:
             storage: 30Gi
@@ -146,8 +145,8 @@ spec:
               cpu: 1000m
               memory: 2Gi
             requests:
-              cpu: 100m
-              memory: 512Mi
+              cpu: 1000m
+              memory: 2Gi
           env:
             - name: node.name
               valueFrom:

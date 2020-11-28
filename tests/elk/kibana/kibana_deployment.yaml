@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kibana
-  namespace: NAMESPACE
   labels:
     app: kibana
     heritage: Helm
@@ -23,6 +22,9 @@ spec:
       securityContext:
         fsGroup: 1000
       volumes:
+        - name: config
+          configMap:
+            name: kibana-config
       containers:
         - name: kibana
           securityContext:
@@ -66,6 +68,7 @@ spec:
 
                       STATUS=$(curl --output /dev/null --write-out "%{http_code}" -k "$@" "http://localhost:5601${path}")
                       if [[ "${STATUS}" -eq 200 ]]; then
+                        curl -X POST "http://${ELASTICSEARCH_USERNAME}:${ELASTICSEARCH_PASSWORD}@localhost:5601/api/saved_objects/_import" -H "kbn-xsrf: true" --form file=@/usr/share/kibana/config/kibana.ndjson
                         exit 0
                       fi
 
@@ -84,3 +87,5 @@ spec:
               cpu: 100m
               memory: 512Mi
           volumeMounts:
+            - name: config
+              mountPath: /usr/share/kibana/config
