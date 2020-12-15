@@ -38,6 +38,7 @@ require (
 	golang.org/x/net v0.0.0-20201006153459-a7d1128ccaa0
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 	golang.org/x/sys v0.0.0-20201007165808-a893ed343c85 // indirect
+	golang.org/x/tools v0.0.0-20201002184944-ecd9fd270d5d
 	google.golang.org/api v0.32.0
 	google.golang.org/genproto v0.0.0-20201007142714-5c0e72c5e71e
 	google.golang.org/grpc v1.32.0
