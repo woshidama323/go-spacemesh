@@ -188,7 +188,9 @@ func newFetchWorker(s networker, count int, reqFactory batchRequestFactory, idsC
 				}
 			}
 			//finished pass results to chan
+			lg.Info("returning fetched items")
 			output <- fetchJob{ids: ids, items: fetched}
+			lg.Info("returned fetched items %v", ids)
 		}
 	}
 	return worker{Logger: lg, Once: mu, workCount: &acount, output: output, work: workFunc}

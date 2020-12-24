@@ -86,7 +86,7 @@ func (fq *fetchQueue) work() error {
 
 		fq.Info("fetched %ss %s", fq.name, concatShortIds(bjb.ids))
 		fq.handleFetch(bjb)
-		fq.Debug("next batch")
+		fq.Info("next batch")
 	}
 	return nil
 }
@@ -130,18 +130,22 @@ func (fq *fetchQueue) invalidate(id types.Hash32, valid bool) {
 //returns items out of itemIds that are not in the local database
 func (fq *fetchQueue) handle(itemIds []types.Hash32) (map[types.Hash32]item, error) {
 	if len(itemIds) == 0 {
-		fq.Debug("handle empty item ids slice")
+		fq.Warning("handle empty item ids slice")
 		return nil, nil
 	}
 
 	unprocessedItems, _, missing := fq.checkLocal(itemIds)
 	if len(missing) > 0 {
 
+		fq.Info("adding to pending")
 		output := fq.addToPendingGetCh(missing)
+		fq.Info("added to pending")
 
 		if success := <-output; !success {
 			return nil, fmt.Errorf("could not fetch all items")
 		}
+		fq.Info("output ok")
+
 
 		unprocessedItems, _, missing = fq.checkLocal(itemIds)
 		if len(missing) > 0 {
@@ -243,7 +247,7 @@ func newAtxQueue(s *Syncer, fetchPoetProof fetchPoetProofFunc) *atxQueue {
 
 //we could get rid of this if we had a unified id type
 func (atx atxQueue) HandleAtxs(atxids []types.ATXID) ([]*types.ActivationTx, error) {
-	atx.Log.Debug("going to fetch %v", atxids)
+	atx.Log.Info("going to fetch %v", atxids)
 	atxItems := make([]types.Hash32, 0, len(atxids))
 	for _, i := range atxids {
 		atxItems = append(atxItems, i.Hash32())

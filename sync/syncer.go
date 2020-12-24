@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/spacemeshos/go-spacemesh/common/util"
 	"github.com/spacemeshos/go-spacemesh/events"
 	"sync"
 	"sync/atomic"
@@ -1154,6 +1155,7 @@ func fetchWithFactory(wrk worker) chan interface{} {
 // FetchPoetProof fetches a poet proof from network peers
 func (s *Syncer) FetchPoetProof(poetProofRef []byte) error {
 	if !s.poetDb.HasProof(poetProofRef) {
+		s.Log.Info("going to fetch poet proof %v", util.Bytes2Hex(poetProofRef))
 		out := <-fetchWithFactory(newNeighborhoodWorker(s, 1, poetReqFactory(poetProofRef)))
 		if out == nil {
 			return fmt.Errorf("could not find PoET proof with any neighbor")
@@ -1163,6 +1165,7 @@ func (s *Syncer) FetchPoetProof(poetProofRef []byte) error {
 		if err != nil {
 			return err
 		}
+		s.Log.Info("done fetch poet proof %v", util.Bytes2Hex(poetProofRef))
 	}
 	return nil
 }
