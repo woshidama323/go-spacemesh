@@ -105,8 +105,9 @@ func SyncMockFactoryManClock(number int, conf Configuration, name string, dbType
 		l := log.NewDefault(name)
 		blockValidator := blockEligibilityValidatorMock{}
 		txpool := state.NewTxMemPool()
-		atxpool := activation.NewAtxMemPool()
-		sync := NewSync(net, getMesh(dbType, Path+name+"_"+time.Now().String()), txpool, atxpool, blockValidator, poetDb(), conf, ticker, l)
+		dbpath := Path + name + "_" + time.Now().String()
+		msh := getMesh(dbType, dbpath)
+		sync := NewSync(net, msh, txpool, msh.AtxDB, blockValidator, poetDb(), conf, ticker, l)
 		nodes = append(nodes, sync)
 		p2ps = append(p2ps, net)
 	}
@@ -129,7 +130,9 @@ func getMeshWithLevelDB(id string) *mesh.Mesh {
 	lg := log.NewDefault(id)
 	mshdb, _ := mesh.NewPersistentMeshDB(id, 5, lg)
 	atxdbStore, _ := database.NewLDBDatabase(id+"atx", 0, 0, lg.WithOptions(log.Nop))
-	atxdb := activation.NewDB(atxdbStore, &mockIStore{}, mshdb, 10, &validatorMock{}, lg.WithOptions(log.Nop))
+	iddbStore, _ := database.NewLDBDatabase(id+"id", 0, 0, lg.WithOptions(log.Nop))
+	idstore := activation.NewIdentityStore(iddbStore)
+	atxdb := activation.NewDB(atxdbStore, idstore, mshdb, 3, &validatorMock{}, lg.WithOptions(log.Nop))
 	return mesh.NewMesh(mshdb, atxdb, rewardConf, &meshValidatorMock{}, &mockTxMemPool{}, &mockState{}, lg.WithOptions(log.Nop))
 }
 
@@ -1806,4 +1809,184 @@ func closed(ch chan struct{}) bool {
 	default:
 		return false
 	}
+}
+
+type simpleMemPoetDB struct {
+	m map[string][]byte
+}
+
+func (pdb simpleMemPoetDB) ValidateAndStore(proofMessage *types.PoetProofMessage) error {
+
+	b, err := types.InterfaceToBytes(&proofMessage)
+	if err != nil {
+		panic(fmt.Errorf("wtf %v", err))
+	}
+
+	p, err := proofMessage.Ref()
+	if err != nil {
+		panic(err.Error())
+	}
+	pdb.m[string(p)] = b
+	return nil
+}
+
+func (pdb simpleMemPoetDB) HasProof(proofRef []byte) bool {
+	return true
+}
+
+func (pdb simpleMemPoetDB) GetProofMessage(proofRef []byte) ([]byte, error) {
+	return pdb.m[string(proofRef)], nil
+}
+
+func newSimpleMemPoetDB() poetDb {
+	return simpleMemPoetDB{m: make(map[string][]byte)}
+}
+
+type atxMaatuf struct {
+	*types.ActivationTx
+	poetProofRefFunc func() types.Hash32
+}
+
+func (am *atxMaatuf) GetPoetProofRef() types.Hash32 {
+	if am.poetProofRefFunc != nil {
+		return am.poetProofRefFunc()
+	}
+	return emptyLayer
+}
+
+func TestAtxSyncing(t *testing.T) {
+	syncers, _, _ := SyncMockFactory(2, conf, t.Name(), levelDB, newMemPoetDb)
+	//
+	//// Syncer b wants to sync on atxs from sync a
+	//
+	const numAtxs = 50
+	syncerA := syncers[0]
+	syncerB := syncers[1]
+	//syncerC := syncers[2]
+
+	proofMessage := makePoetProofMessage(t)
+	//err := bl2.poetDb.ValidateAndStore(&proofMessage)
+
+	poetProofBytes, err := types.InterfaceToBytes(&proofMessage.PoetProof)
+	poetRef := sha256.Sum256(poetProofBytes)
+
+	mockAtxFactory := func(id types.LayerID) (*types.ActivationTx, *types.PoetProofMessage, types.Hash32) {
+
+		//block1 := types.NewExistingBlock(1, []byte(rand.String(8)), nil)
+		signer := signing.NewEdSigner()
+		atx1 := atx(signer.PublicKey().String())
+		atx1.Nipst.PostProof.Challenge = poetRef[:]
+		atx1.PubLayerID = id
+		atx1.CalcAndSetID()
+		err = activation.SignAtx(signer, atx1)
+		assert.NoError(t, err)
+		return atx1, &proofMessage, poetRef
+	}
+
+	mockAtxFactoryWithPos := func(id types.LayerID, posAtx types.ATXID) (*types.ActivationTx, *types.PoetProofMessage, types.Hash32) {
+
+		//block1 := types.NewExistingBlock(1, []byte(rand.String(8)), nil)
+		signer := signing.NewEdSigner()
+		atx1 := atx(signer.PublicKey().String())
+		atx1.Nipst.PostProof.Challenge = poetRef[:]
+		atx1.PubLayerID = id
+		atx1.PositioningATX = posAtx
+		atx1.CalcAndSetID()
+		err = activation.SignAtx(signer, atx1)
+		assert.NoError(t, err)
+		return atx1, &proofMessage, poetRef
+	}
+
+	posAtx, _, _ := mockAtxFactory(0)
+	require.NoError(t, syncerA.poetDb.ValidateAndStore(&proofMessage))
+	err = syncerA.Mesh.ProcessAtxs([]*types.ActivationTx{posAtx})
+
+	var atxs []*types.ActivationTx
+	var atxids []types.ATXID
+
+	for i := 0; i < numAtxs; i++ {
+		atx, _, _ := mockAtxFactoryWithPos(1, posAtx.ID())
+		atxs = append(atxs, atx)
+		atxids = append(atxids, atx.ID())
+	}
+	//require.NoError(t, syncerA.poetDb.ValidateAndStore(&proofMessage))
+	err = syncerA.Mesh.ProcessAtxs(atxs)
+	require.NoError(t, err)
+	fmt.Println("=========================== PROCESSED ATX ==================================")
+	time.Sleep(1 * time.Second)
+	atxsFromDb := syncerA.Mesh.GetEpochAtxs(0)
+	require.Len(t, atxsFromDb, numAtxs+1)
+	require.Equal(t, types.SortAtxIDs(append(atxids, posAtx.ID())), types.SortAtxIDs(atxsFromDb))
+	ch := make(chan struct{})
+	go func() {
+		err = syncerB.syncEpochActivations(0)
+		require.NoError(t, err)
+		ch <- struct{}{}
+	}()
+	//go func() {
+	//	err := syncerC.syncEpochActivations(2)
+	//	require.Error(t, err)
+	//	ch <- struct{}{}
+	//}()
+	//<-ch
+	<-ch
+	//func (s *Syncer) syncAtxs(currentSyncLayer types.LayerID) {
+	//	lastLayerOfEpoch := (currentSyncLayer.GetEpoch() + 1).FirstLayer() - 1
+	//	if currentSyncLayer == lastLayerOfEpoch {
+	//		err := s.syncEpochActivations(currentSyncLayer.GetEpoch())
+	//		if err != nil {
+	//			s.With().Error("cannot fetch epoch atxs ", currentSyncLayer, log.Err(err))
+	//		}
+	//	}
+	//}
+	//
+	//func (s *Syncer) syncEpochActivations(epoch types.EpochID) error {
+	//	s.Log.Info("syncing atxs for epoch %v", epoch)
+	//	hashes, err := s.fetchEpochAtxHashes(epoch)
+	//	if err != nil {
+	//	return err
+	//}
+	//
+	//	atxIds, err := s.fetcEpochAtxs(hashes, epoch)
+	//	if err != nil {
+	//	return err
+	//}
+	//
+	//	s.Info("fetched %v atxs for epoch %v meshVizApp%v", len(atxIds), epoch, atxIds)
+	//
+	//	_, err = s.atxQueue.HandleAtxs(atxIds)
+	//
+	//	return err
+	//}
+
+	//proofMessage := makePoetProofMessage(t)
+	//err := bl2.poetDb.ValidateAndStore(&proofMessage)
+	//
+	//poetProofBytes, err := types.InterfaceToBytes(&proofMessage.PoetProof)
+	//poetRef := sha256.Sum256(poetProofBytes)
+	//
+	////block1 := types.NewExistingBlock(1, []byte(rand.String(8)), nil)
+	//atx1 := atx(signer.PublicKey().String())
+	//atx1.Nipst.PostProof.Challenge = poetRef[:]
+	//err = activation.SignAtx(signer, atx1)
+	//assert.NoError(t, err)
+	//atx2 := atx(signer.PublicKey().String())
+	//atx2.Nipst.PostProof.Challenge = poetRef[:]
+	//err = activation.SignAtx(signer, atx2)
+	//assert.NoError(t, err)
+	//atx3 := atx(signer.PublicKey().String())
+	//atx3.Nipst.PostProof.Challenge = poetRef[:]
+	//err = activation.SignAtx(signer, atx3)
+	//assert.NoError(t, err)
+	//
+	//bl2.atxDb.ProcessAtx(atx1)
+	//bl2.atxDb.ProcessAtx(atx2)
+	//bl2.atxDb.ProcessAtx(atx3)
+	////bl2.AddBlockWithTxs(block1)
+	//
+	//res, err := bl1.atxQueue.handle([]types.Hash32{atx1.Hash32(), atx2.Hash32(), atx3.Hash32()})
+	//if err != nil {
+	//	t.Error(err)
+	//}
+
 }
