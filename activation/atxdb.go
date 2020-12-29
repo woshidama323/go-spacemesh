@@ -779,7 +779,7 @@ func (db *DB) HandleAtxData(data []byte, syncer service.Fetcher) error {
 		// TODO: blacklist peer
 	}
 
-	db.log.With().Info("stored and propagated new syntactically valid ATX", atx.ID())
+		db.log.With().Info("stored and propagated new syntactically valid ATX", atx.ID())
 	return nil
 }
 

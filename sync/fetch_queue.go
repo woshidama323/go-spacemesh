@@ -67,27 +67,36 @@ func (fq *fetchQueue) work() error {
 
 	defer fq.shutdownRecover()
 	output := fetchWithFactory(newFetchWorker(fq.workerInfra, runtime.NumCPU(), fq.batchRequestFactory, fq.queue, fq.name))
-	for out := range output {
-		fq.Debug("new batch out of queue")
-		if out == nil {
-			fq.Info("close queue")
-			return nil
-		}
+	wg := sync.WaitGroup{}
+	wg.Add(runtime.NumCPU())
+	for i:=0; i < runtime.NumCPU(); i ++{
+		go func() {
+			fq.Info("running work")
+			for out := range output {
+				fq.Info("new batch out of queue")
+				if out == nil {
+					fq.Info("close queue")
+					break
+				}
 
-		bjb, ok := out.(fetchJob)
-		if !ok {
-			fq.Error(fmt.Sprintf("Type assertion err %v", out))
-			continue
-		}
+				bjb, ok := out.(fetchJob)
+				if !ok {
+					fq.Error(fmt.Sprintf("Type assertion err %v", out))
+					continue
+				}
 
-		if len(bjb.ids) == 0 {
-			return fmt.Errorf("channel closed")
-		}
+				if len(bjb.ids) == 0 {
+					break //fmt.Errorf("channel closed")
+				}
 
-		fq.Info("fetched %ss %s", fq.name, concatShortIds(bjb.ids))
-		fq.handleFetch(bjb)
-		fq.Info("next batch")
+				fq.Info("fetched %ss %s", fq.name, concatShortIds(bjb.ids))
+				fq.handleFetch(bjb)
+				fq.Info("next batch")
+			}
+			wg.Done()
+		}()
 	}
+	wg.Wait()
 	return nil
 }
 
@@ -103,9 +112,9 @@ func (fq *fetchQueue) addToPending(ids []types.Hash32) []chan bool {
 	for _, id := range ids {
 		ch := make(chan bool, 1)
 		deps = append(deps, ch)
-		if _, ok := fq.pending[id]; !ok {
-			idsToAdd = append(idsToAdd, id)
-		}
+		//if _, ok := fq.pending[id]; !ok {
+		idsToAdd = append(idsToAdd, id)
+		//}
 		fq.pending[id] = append(fq.pending[id], ch)
 	}
 	fq.Unlock()
@@ -122,9 +131,11 @@ func (fq *fetchQueue) invalidate(id types.Hash32, valid bool) {
 	fq.Unlock()
 
 	for _, dep := range deps {
+		fq.Info("going to invalidate")
 		dep <- valid
+		fq.Info("invalidate yes")
 	}
-	fq.Debug("invalidated %v %v", id.ShortString(), valid)
+	fq.Info("invalidated %v %v", id.ShortString(), valid)
 }
 
 //returns items out of itemIds that are not in the local database
@@ -139,7 +150,7 @@ func (fq *fetchQueue) handle(itemIds []types.Hash32) (map[types.Hash32]item, err
 
 		fq.Info("adding to pending")
 		output := fq.addToPendingGetCh(missing)
-		fq.Info("added to pending")
+		fq.Info("added to pending %v", len(fq.queue))
 
 		if success := <-output; !success {
 			return nil, fmt.Errorf("could not fetch all items")

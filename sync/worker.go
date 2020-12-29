@@ -140,6 +140,7 @@ func newFetchWorker(s networker, count int, reqFactory batchRequestFactory, idsC
 	lg := s.WithName("FetchWrker")
 	workFunc := func() {
 		for ids := range idsChan {
+			lg.Info("id chan %v", len(idsChan))
 			if ids == nil {
 				lg.Info("close fetch worker ")
 				return
@@ -190,7 +191,7 @@ func newFetchWorker(s networker, count int, reqFactory batchRequestFactory, idsC
 			//finished pass results to chan
 			lg.Info("returning fetched items")
 			output <- fetchJob{ids: ids, items: fetched}
-			lg.Info("returned fetched items %v", ids)
+			lg.Info("returned fetched items %v %v", ids, len(output))
 		}
 	}
 	return worker{Logger: lg, Once: mu, workCount: &acount, output: output, work: workFunc}

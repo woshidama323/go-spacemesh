@@ -77,6 +77,8 @@ type AtxDB interface {
 	GetAtxHeader(id types.ATXID) (*types.ActivationTxHeader, error)
 	GetFullAtx(id types.ATXID) (*types.ActivationTx, error)
 	SyntacticallyValidateAtx(atx *types.ActivationTx) error
+	ProcessAtx(atx *types.ActivationTx) error
+	GetEpochAtxs(epochID types.EpochID) (atxs []types.ATXID)
 }
 
 // Mesh is the logic layer above our mesh.DB database

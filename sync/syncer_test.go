@@ -1859,7 +1859,7 @@ func TestAtxSyncing(t *testing.T) {
 	//
 	//// Syncer b wants to sync on atxs from sync a
 	//
-	const numAtxs = 50
+	const numAtxs = 1
 	syncerA := syncers[0]
 	syncerB := syncers[1]
 	//syncerC := syncers[2]
