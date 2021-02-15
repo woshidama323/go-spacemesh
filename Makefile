@@ -191,9 +191,9 @@ tag-and-build:
 	git commit -m "bump version to ${VERSION}" version.txt
 	git tag ${VERSION}
 	git push origin ${VERSION}
-	docker build -t go-spacemesh:${VERSION} .
-	docker tag go-spacemesh:${VERSION} spacemeshos/go-spacemesh:${VERSION}
-	docker push spacemeshos/go-spacemesh:${VERSION}
+	docker build -t sudachen:${VERSION} .
+	docker tag sudachen:${VERSION} sudachen/go-spacemesh:${VERSION}
+	docker push sudachen/go-spacemesh:${VERSION}
 .PHONY: tag-and-build
 
 
