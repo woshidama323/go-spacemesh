@@ -18,6 +18,7 @@ RUN go mod download
 COPY setup_env.sh .
 COPY scripts/* scripts/
 
+RUN for i in ./setup_env.sh scripts/*; do dos2unix $i; done
 RUN ./setup_env.sh
 
 RUN go get github.com/golang/snappy@v0.0.1

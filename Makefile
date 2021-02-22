@@ -8,6 +8,8 @@ BIN_DIR = $(CURR_DIR)/build
 BIN_DIR_WIN = $(CURR_DIR_WIN)/build
 export GO111MODULE = on
 
+DOCKER_HUB=sudachen
+
 # These commands cause problems on Windows
 ifeq ($(OS),Windows_NT)
        # Just assume we're in interactive mode on Windows
@@ -40,7 +42,7 @@ DOCKERRUNARGS := --rm -e ES_PASSWD="$(ES_PASSWD)" \
 	-e GOOGLE_APPLICATION_CREDENTIALS=./spacemesh.json \
 	-e ES_USER=$(ES_USER) \
 	-e ES_PASS=$(ES_PASS) \
-	-e CLIENT_DOCKER_IMAGE="spacemeshos/$(DOCKER_IMAGE_REPO):$(BRANCH)" \
+	-e CLIENT_DOCKER_IMAGE="$(DOCKER_HUB)/$(DOCKER_IMAGE_REPO):$(BRANCH)" \
 	go-spacemesh-python:$(BRANCH)
 ifdef INTERACTIVE
 	DOCKERRUN := docker run -it $(DOCKERRUNARGS)
@@ -181,17 +183,23 @@ cover:
 .PHONY: cover
 
 
-tag-and-build:
+version-bump:
 	git diff --quiet || (echo "\033[0;31mWorking directory not clean!\033[0m" && git --no-pager diff && exit 1)
 	echo ${VERSION} > version.txt
 	git commit -m "bump version to ${VERSION}" version.txt
 	git tag ${VERSION}
 	git push origin ${VERSION}
-	docker build -t go-spacemesh:${VERSION} .
-	docker tag go-spacemesh:${VERSION} spacemeshos/go-spacemesh:${VERSION}
-	docker push spacemeshos/go-spacemesh:${VERSION}
-.PHONY: tag-and-build
+.PHONY: version-bump
 
+
+docker-build-tag-push:
+	docker build -t go-spacemesh:${VERSION} .
+	docker tag go-spacemesh:${VERSION} $(DOCKER_HUB)/go-spacemesh:${VERSION}
+	docker push $(DOCKER_HUB)/go-spacemesh:${VERSION}
+.PHONY: docker-build-tag-push
+
+tag-and-build: version-bump docker-build-tag-push
+.PHONY: tag-and-build
 
 list-versions:
 	@echo "Latest 5 tagged versions:\n"
@@ -227,12 +235,12 @@ dockerpush: dockerbuild-go dockerpush-only
 
 dockerpush-only:
 	echo "$(DOCKER_PASSWORD)" | docker login -u "$(DOCKER_USERNAME)" --password-stdin
-	docker tag $(DOCKER_IMAGE_REPO):$(BRANCH) spacemeshos/$(DOCKER_IMAGE_REPO):$(BRANCH)
-	docker push spacemeshos/$(DOCKER_IMAGE_REPO):$(BRANCH)
+	docker tag $(DOCKER_IMAGE_REPO):$(BRANCH) $(DOCKER_HUB)/$(DOCKER_IMAGE_REPO):$(BRANCH)
+	docker push $(DOCKER_HUB)/$(DOCKER_IMAGE_REPO):$(BRANCH)
 
 ifeq ($(BRANCH),develop)
-	docker tag $(DOCKER_IMAGE_REPO):$(BRANCH) spacemeshos/$(DOCKER_IMAGE_REPO):$(SHA)
-	docker push spacemeshos/$(DOCKER_IMAGE_REPO):$(SHA)
+	docker tag $(DOCKER_IMAGE_REPO):$(BRANCH) $(DOCKER_HUB)/$(DOCKER_IMAGE_REPO):$(SHA)
+	docker push $(DOCKER_HUB)/$(DOCKER_IMAGE_REPO):$(SHA)
 endif
 .PHONY: dockerpush-only
 
