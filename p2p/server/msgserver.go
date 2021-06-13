@@ -4,6 +4,7 @@ package server
 import (
 	"container/list"
 	"fmt"
+	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/p2p/p2pcrypto"
 	"github.com/spacemeshos/go-spacemesh/p2p/service"
@@ -240,6 +241,58 @@ func (p *MessageServer) SendRequest(msgType MessageType, payload []byte, address
 	}
 	p.Log.With().Debug("sent request", log.Uint64("req_id", reqID))
 	return nil
+}
+
+type Response struct {
+	Data  []byte
+	Error error
+}
+
+func (p *MessageServer) SendMessage(msgType MessageType, message interface{}, address p2pcrypto.PublicKey, resHandler func(msg []byte), timeoutHandler func(err error)) error {
+	bytes, err := types.InterfaceToBytes(message)
+	if err != nil {
+		return err
+	}
+
+	return p.SendRequest(msgType, bytes, address, resHandler, timeoutHandler)
+}
+
+func (p *MessageServer) SendMessageSync(msgType MessageType, message interface{}, address p2pcrypto.PublicKey) chan Response {
+
+	res := make(chan Response, 1)
+	bytes, err := types.InterfaceToBytes(message)
+	if err != nil {
+		res <- Response{
+			Data:  nil,
+			Error: err,
+		}
+		return res
+	}
+
+	reshandler := func(buf []byte) {
+		res <- Response{
+			Data:  buf,
+			Error: nil,
+		}
+	}
+
+	timeoutHandler := func(err error) {
+		res <- Response{
+			Data:  nil,
+			Error: err,
+		}
+	}
+
+	err = p.SendRequest(msgType, bytes, address, reshandler, timeoutHandler)
+	if err != nil {
+		res <- Response{
+			Data:  nil,
+			Error: err,
+		}
+		return res
+	}
+
+	return res
 }
 
 func (p *MessageServer) newReqID() uint64 {

@@ -40,12 +40,12 @@ func TestProtocol_SendRequest(t *testing.T) {
 	msg := <-strCh
 
 	assert.EqualValues(t, "some value to return", msg, "value received did not match correct value")
-	assert.NoError(t, err, "Should not return error")
+	assert.NoError(t, err, "Should not return Error")
 
 	// Now try sending to a bad address
 	randkey := p2pcrypto.NewRandomPubkey()
 	err = fnd2.SendRequest(1, nil, randkey, callback, func(err error) {})
-	assert.Error(t, err, "Sending to bad address should return error")
+	assert.Error(t, err, "Sending to bad address should return Error")
 }
 
 func TestProtocol_CleanOldPendingMessages(t *testing.T) {
@@ -73,14 +73,14 @@ func TestProtocol_CleanOldPendingMessages(t *testing.T) {
 	}
 
 	err := fnd2.SendRequest(1, nil, n1.PublicKey(), callback, func(err error) {})
-	assert.NoError(t, err, "Should not return error")
+	assert.NoError(t, err, "Should not return Error")
 	assert.EqualValues(t, 1, fnd2.pendingQueue.Len(), "value received did not match correct value1")
 
 	timeout := time.After(3 * time.Second)
-	// Keep trying until we're timed out or got a result or got an error
+	// Keep trying until we're timed out or got a result or got an Error
 
 	select {
-	// Got a timeout! fail with a timeout error
+	// Got a timeout! fail with a timeout Error
 	case <-timeout:
 		t.Error("timeout")
 		return
@@ -117,7 +117,7 @@ func TestProtocol_Close(t *testing.T) {
 	}
 
 	err := fnd2.SendRequest(1, nil, n1.PublicKey(), callback, func(err error) {})
-	assert.NoError(t, err, "Should not return error")
+	assert.NoError(t, err, "Should not return Error")
 	assert.EqualValues(t, 1, fnd2.pendingQueue.Len(), "value received did not match correct value1")
 	fnd2.Close()
 }

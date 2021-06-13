@@ -33,9 +33,13 @@ type TxProcessor interface {
 
 // layerDB is an interface that returns layer data and blocks
 type layerDB interface {
+	GetAggregatedLayerHash(ID types.LayerID) types.Hash32
 	GetLayerHash(ID types.LayerID) types.Hash32
 	GetLayerHashBlocks(hash types.Hash32) []types.BlockID
 	GetLayerVerifyingVector(hash types.Hash32) []types.BlockID
+
+	GetCurrentLayer() types.LayerID
+	GetLastVerifiedLayer() types.LayerID
 }
 
 type atxIDsDB interface {
@@ -58,8 +62,16 @@ type poetDb interface {
 type network interface {
 	GetPeers() []p2ppeers.Peer
 	SendRequest(msgType server.MessageType, payload []byte, address p2pcrypto.PublicKey, resHandler func(msg []byte), timeoutHandler func(err error)) error
+	SendMessage(msgType server.MessageType, message interface{}, address p2pcrypto.PublicKey, resHandler func(msg []byte), timeoutHandler func(err error)) error
+	SendMessageSync(msgType server.MessageType, message interface{}, address p2pcrypto.PublicKey) chan server.Response
 	Close()
 }
+
+const (
+	NotSynced = iota
+	SyncAndGossip = iota
+	Synced =  iota
+)
 
 var emptyHash = types.Hash32{}
 
@@ -130,10 +142,159 @@ const (
 	LayerBlocksMsg = 1
 	LayerHashMsg   = 2
 	atxIDsMsg      = 3
+
+	LayerHashReq            = 4
+	LayerAggregatedHashReq = 5
+	LayerBlockSync         = 6
 )
 
 // FetchFlow is the main syncing flow TBD
 func (l *Logic) FetchFlow() {
+	// for each peer
+	// 	send hash request for latest layer (clock layer) + current hash
+	//  receive aggregated layer hash
+	// if not equal
+	//	request blocks for hash
+	// 	compare to own blocks
+	//	send diff of blockIDs
+
+	// is synced logic: WTF?
+}
+
+func (l *Logic) StartSync() {
+	currentLayer := l.layerDB.GetCurrentLayer()
+	for {
+		for _, peer := range l.net.GetPeers() {
+			l.syncOnePeer(peer, currentLayer)
+		}
+		if currentLayer == l.layerDB.GetCurrentLayer() {
+			break
+		} else {
+			currentLayer = l.layerDB.GetCurrentLayer()
+		}
+	}
+
+
+	// sync one peer with same currentLayer
+	// wait for peer to finish and report status
+	// when all peers have finished: we are synced
+
+
+	//is synced logic: state machine:
+	// if we are not synced: sync until current layer
+	// if we have synced - gossip and sync for 2 layers ( we actually sync every layer)
+	// if we moved from not-synced -> synced + waited 2 layers we are good to go
+	// synced -> not synced if lastLayer -1 is not the same as other peers -> gossip off
+}
+
+func (l *Logic) GetSyncStatus() int {
+	return 1
+}
+
+func (l *Logic) syncOnePeer(peer p2ppeers.Peer, currentLayer types.LayerID) {
+	hash := l.layerDB.GetAggregatedLayerHash(currentLayer)
+
+	remoteHash, err := l.ExchangeAggregatedLayerHash(peer, currentLayer, hash)
+	if err != nil {
+		l.log.Warning("did not find remote hash for layer %v", currentLayer)
+		return
+	}
+
+	if hash == remoteHash {
+		// mark that we are synced
+		l.log.Debug("done syncing")
+		return
+	}
+
+	// run binarty search to find first hash mismatch
+	first := types.LayerID(0)
+	last := currentLayer - 1
+	for first < last {
+		middle := first + last / 2 // floor res
+		hash := l.layerDB.GetAggregatedLayerHash(middle)
+		otherHash, err := l.ExchangeAggregatedLayerHash(peer, currentLayer, hash)
+		if err != nil {
+			l.log.Error("crap")
+		}
+
+		if otherHash != hash {
+			last = middle -1
+		} else {
+			first = middle
+		}
+	}
+	// now we have the first occurrence of not equal hash at first
+	for i := first; i < currentLayer; i++ {
+		hash := l.layerDB.GetLayerHash(i)
+		otherH, err := l.ExchangeLayerHash(peer, i , hash)
+		if err != nil {
+			l.log.Error("cannot sync layer %v with peer %v", i, peer)
+			break
+		}
+		if otherH == hash {
+			// this hash is ok, we don't need to sync blocks
+			continue
+		}
+		aggHAsh := l.layerDB.GetAggregatedLayerHash(i)
+		blocks := l.layerDB.GetLayerHashBlocks(hash)
+
+		res, err := l.ExchangeLayerBlocks(peer, i, hash, aggHAsh, blocks)
+		if err != nil {
+			l.log.Error("cannot sync layer %v with peer %v", i, peer)
+			break
+		}
+
+		for blk := range res.Blocks {
+			//todo: this is not optimal at all, but I think we need to refator the whole block handling thing..
+			bytes, err := types.InterfaceToBytes(blk)
+			if err != nil {
+
+			}
+			err = l.blockHandler.HandleBlockData(bytes, l)
+			if err != nil {
+
+			}
+		}
+	}
+	// now we need to send all blocks from last 2 layers
+}
+
+func (l *Logic) ExchangeAggregatedLayerHash(peer p2ppeers.Peer, remoteLayerID types.LayerID, myHash types.Hash32) (types.Hash32, error) {
+	layerSyncRequest := LayerHash{myHash, remoteLayerID}
+	res := <- l.net.SendMessageSync(LayerAggregatedHashReq, &layerSyncRequest, peer)
+	if res.Error != nil {
+		return emptyHash, res.Error
+	}
+	hash := types.BytesToHash(res.Data)
+	return hash, nil
+}
+
+func (l *Logic) ExchangeLayerHash(peer p2ppeers.Peer, remoteLayerID types.LayerID, myHash types.Hash32) (types.Hash32, error) {
+	layerSyncRequest := LayerHash{myHash, remoteLayerID}
+	res := <- l.net.SendMessageSync(LayerHashReq, &layerSyncRequest, peer)
+	if res.Error != nil {
+		return emptyHash, res.Error
+	}
+	hash := types.BytesToHash(res.Data)
+	return hash, nil
+}
+
+func (l *Logic) ExchangeLayerBlocks(peer p2ppeers.Peer, remoteLayerID types.LayerID, myHash , myAggHash types.Hash32, blocks []types.BlockID) (LayerBlocks, error) {
+	layerSyncRequest := LayerBlocks{remoteLayerID, blocks, myHash, myAggHash}
+	layerSyncResponse := LayerBlocks{}
+	res := <- l.net.SendMessageSync(LayerBlockSync, &layerSyncRequest, peer)
+	if res.Error != nil {
+		return layerSyncResponse, res.Error
+	}
+	err := types.BytesToInterface(res.Data, &layerSyncResponse)
+	return layerSyncResponse, err
+}
+
+func (l *Logic) findFirstNotMatchedLayer(){
+
+}
+
+func (l *Logic) syncInitTimeout(err error){
 
 }
 
@@ -154,6 +315,61 @@ func (l *Logic) AddDBs(blockDB, AtxDB, TxDB, poetDB database.Store) {
 	l.fetcher.AddDB(ATXDB, AtxDB)
 	l.fetcher.AddDB(TXDB, TxDB)
 	l.fetcher.AddDB(POETDB, poetDB)
+}
+
+// LayerHashReqReceiver returns the layer hash for the given layer ID
+func (l *Logic) LayerAggregatedHashSyncReceiver(msg []byte) []byte {
+	layerSyncReq := LayerHash{}
+	err := types.BytesToInterface(msg, &layerSyncReq)
+	if err != nil {
+		l.log.Error("not valid message")
+		return nil
+	}
+	hash := l.layerDB.GetAggregatedLayerHash(layerSyncReq.LayerID)
+	if hash != layerSyncReq.Hash {
+		//todo: add hash diff here so that node can query this hash if not given
+	}
+
+	layerSyncRes := LayerHash{hash, layerSyncReq.LayerID}
+	bts, err := types.InterfaceToBytes(&layerSyncRes)
+	if err != nil {
+		return nil
+	}
+	return bts
+}
+
+// LayerHashReqReceiver returns the layer hash for the given layer ID
+func (l *Logic) LayerBlocksSyncReceiver(msg []byte) []byte {
+	layerSyncReq := LayerBlocks{}
+	err := types.BytesToInterface(msg, &layerSyncReq)
+	if err != nil {
+		l.log.Error("not valid message")
+		return nil
+	}
+	hash := l.layerDB.GetLayerHash(layerSyncReq.LayerID)
+	if hash != layerSyncReq.LayerHash {
+		//todo: add hash diff here so that node can query this hash if not given
+		return nil
+	}
+
+	myBlocks := l.layerDB.GetLayerHashBlocks(hash)
+	myBlocksMap := make(map[types.BlockID]struct{})
+	for _, b := range myBlocks {
+		myBlocksMap[b] = struct{}{}
+	}
+	blocks := []types.BlockID{}
+	for _, otherB :=range layerSyncReq.Blocks {
+		if _, exists := myBlocksMap[otherB]; !exists {
+			blocks = append(blocks, otherB)
+		}
+	}
+
+	layerSyncRes := LayerBlocks{layerSyncReq.LayerID, blocks, hash, l.layerDB.GetAggregatedLayerHash(layerSyncReq.LayerID)}
+	bts, err := types.InterfaceToBytes(&layerSyncRes)
+	if err != nil {
+		return nil
+	}
+	return bts
 }
 
 // LayerPromiseResult is the result of trying to fetch an entire layer- if this fails the error will be added to result

@@ -322,7 +322,7 @@ func (msh *Mesh) persistLayerHashes(l *types.Layer) {
 	prevHash := types.Hash32{}
 	var err error
 	if l.Index() > types.GetEffectiveGenesis() {
-		prevHash, err = msh.getRunningLayerHash(l.Index() - 1)
+		prevHash, err = msh.GetRunningLayerHash(l.Index() - 1)
 		if err != nil {
 			msh.Log.Error("cannot get running layer hash for layer %v", l.Index()-1)
 			return
@@ -480,7 +480,7 @@ func (msh *Mesh) persistRunningLayerHash(layerID types.LayerID, hash types.Hash3
 	}
 }
 
-func (msh *Mesh) getRunningLayerHash(layerID types.LayerID) (types.Hash32, error) {
+func (msh *Mesh) GetRunningLayerHash(layerID types.LayerID) (types.Hash32, error) {
 	bts, err := msh.general.Get(msh.getRunningLayerHashKey(layerID))
 	if err != nil {
 		return [32]byte{}, err
