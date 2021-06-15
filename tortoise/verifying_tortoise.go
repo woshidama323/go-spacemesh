@@ -1,6 +1,7 @@
 package tortoise
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/spacemeshos/go-spacemesh/common/types"
@@ -371,7 +372,7 @@ func RecoverVerifyingTortoise(mdb retriever) (interface{}, error) {
 	return mdb.Retrieve(mesh.TORTOISE, &turtle{})
 }
 
-func (t *turtle) processBlock(block *types.Block) error {
+func (t *turtle) processBlock(ctx context.Context, block *types.Block) error {
 	// When a new block arrives, we look up the block it points to in our table,
 	// and add the corresponding vector (multiplied by the block weight) to our own vote-totals vector.
 	// We then add the vote difference vector and the explicit vote vector to our vote-totals vector.
@@ -401,7 +402,8 @@ func (t *turtle) processBlock(block *types.Block) error {
 	for blk, vote := range baseBlockOpinion.BlocksOpinion {
 		fblk, err := t.bdp.GetBlock(blk)
 		if err != nil {
-			return fmt.Errorf("voted block not in db voting_block_id: %v, voting_block_layer_id: %v, voted_block_id: %v", block.ID().String(), block.LayerIndex, blk.String())
+			log.AddErrorContext(ctx, block.ID(), block.LayerIndex, blk)
+			return fmt.Errorf("voted block not in db")
 		}
 		window := types.LayerID(0)
 		if block.LayerIndex > t.Hdist {
@@ -463,8 +465,10 @@ func (t *turtle) HandleIncomingLayer(newlyr *types.Layer) (pbaseOld, pbaseNew ty
 		if _, ok := t.BlockOpinionsByLayer[b.LayerIndex]; !ok {
 			t.BlockOpinionsByLayer[b.LayerIndex] = make(map[types.BlockID]Opinion, t.AvgLayerSize)
 		}
-		if err := t.processBlock(b); err != nil {
-			log.Panic(fmt.Sprintf("error processing block %v: %v", b.ID(), err))
+		ctx := log.NewErrorContext(context.TODO())
+		if err := t.processBlock(ctx, b); err != nil {
+			fields := log.ExtractErrorContext(ctx)
+			log.With().Panic(fmt.Sprintf("error processing block %v: %v", b.ID(), err), fields...)
 		}
 	}
 

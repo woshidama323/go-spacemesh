@@ -18,6 +18,9 @@ const (
 
 	// PeerIDKey is used to store the peer ID in the p2p stack
 	PeerIDKey
+
+	// errorContextKey is used to store context about errors
+	errorContextKey
 )
 
 // WithRequestID returns a context which knows its request ID.
@@ -109,4 +112,21 @@ func WithSessionID(ctx context.Context, sessionID string, fields ...LoggableFiel
 // It can be used when there isn't a single, clear, unique id associated with a session.
 func WithNewSessionID(ctx context.Context, fields ...LoggableField) context.Context {
 	return WithSessionID(ctx, uuid.New().String(), fields...)
+}
+
+// NewErrorContext returns a new context object with a field to contain error context.
+func NewErrorContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, errorContextKey, []LoggableField{})
+}
+
+// AddErrorContext adds fields to error context
+func AddErrorContext(ctx context.Context, fields ...LoggableField) context.Context {
+	oldFields := ExtractErrorContext(ctx)
+	return context.WithValue(ctx, errorContextKey, append(oldFields, fields...))
+}
+
+// ExtractErrorContext extracts error context fields
+func ExtractErrorContext(ctx context.Context) (fields []LoggableField) {
+	fields, _ = ctx.Value(errorContextKey).([]LoggableField)
+	return
 }
