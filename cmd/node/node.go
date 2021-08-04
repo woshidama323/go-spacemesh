@@ -944,14 +944,14 @@ func (app *SpacemeshApp) stopServices() {
 		app.P2P.Shutdown()
 	}
 
-	if app.layerFetch != nil {
-		app.log.Info("closing layerFetch")
-		app.layerFetch.Close()
-	}
-
 	if app.syncer != nil {
 		app.log.Info("closing sync")
 		app.syncer.Close()
+	}
+
+	if app.layerFetch != nil {
+		app.log.Info("closing layerFetch")
+		app.layerFetch.Close()
 	}
 
 	if app.mesh != nil {

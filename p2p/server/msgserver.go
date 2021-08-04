@@ -129,10 +129,36 @@ func (p *MessageServer) readLoop(ctx context.Context) {
 				p.WithContext(ctx).Error("read loop channel was closed")
 				return
 			}
+			//p.WithContext(ctx).With().Info("limiting worker",
+			//	log.Int("count", len(p.workerLimiter)),
+			//	log.Int("cap", cap(p.workerLimiter)))
 			p.workerCount.Add(1)
 			p.workerLimiter <- struct{}{}
 			go func(msg Message) {
-				p.handleMessage(ctx, msg)
+				//// TODO LANE: this is hanging
+				//p.WithContext(ctx).With().Info("handling message start",
+				//	log.Int("count", len(p.workerLimiter)),
+				//	log.Int("cap", cap(p.workerLimiter)))
+				//p.WithContext(ctx).Info("START handle message")
+				doneChan := make(chan struct{})
+				go func() {
+					p.handleMessage(ctx, msg)
+					select {
+					case doneChan <- struct{}{}:
+					case <-time.After(time.Second):
+						p.WithContext(ctx).With().Error("handle message listener disappeared")
+					}
+				}()
+				select {
+				case <-doneChan:
+				case <-time.After(10 * time.Second):
+					//p.WithContext(ctx).With().Error("handle message timed out")
+					buf := make([]byte, 1<<16)
+					numbytes := runtime.Stack(buf, true)
+					fmt.Printf("%s", buf[:numbytes])
+					panic("handle message timed out")
+				}
+				//p.WithContext(ctx).Info("END handle message")
 				<-p.workerLimiter
 				p.workerCount.Done()
 			}(msg.(Message))
@@ -156,6 +182,7 @@ func (p *MessageServer) cleanStaleMessages() {
 				foo, okFoo := p.resHandlers[item.id]
 				p.pendMutex.RUnlock()
 				if okFoo {
+					// NOTE: need to make sure these callbacks do not block!
 					foo.failCallBack(fmt.Errorf("response timeout"))
 				}
 				p.removeFromPending(item.id)
@@ -173,6 +200,7 @@ func (p *MessageServer) cleanStaleMessages() {
 func (p *MessageServer) removeFromPending(reqID uint64) {
 	var next *list.Element
 	p.pendMutex.Lock()
+	defer p.pendMutex.Unlock()
 	for e := p.pendingQueue.Front(); e != nil; e = next {
 		next = e.Next()
 		if reqID == e.Value.(Item).id {
@@ -183,15 +211,18 @@ func (p *MessageServer) removeFromPending(reqID uint64) {
 	}
 	p.With().Debug("delete request result handler", log.Uint64("p2p_request_id", reqID))
 	delete(p.resHandlers, reqID)
-	p.pendMutex.Unlock()
 }
 
 func (p *MessageServer) handleMessage(ctx context.Context, msg Message) {
 	data := msg.Data().(*service.DataMsgWrapper)
 	if data.Req {
+		//p.WithContext(ctx).With().Info("handling request message start", log.String("mshhash", util.Bytes2Hex(msg.Bytes())))
 		p.handleRequestMessage(ctx, msg, data)
+		//p.WithContext(ctx).With().Info("handling request message done", log.String("mshhash", util.Bytes2Hex(msg.Bytes())))
 	} else {
+		//p.WithContext(ctx).With().Info("handling response message start", log.String("mshhash", util.Bytes2Hex(msg.Bytes())))
 		p.handleResponseMessage(ctx, data)
+		//p.WithContext(ctx).With().Info("handling response message done", log.String("mshhash", util.Bytes2Hex(msg.Bytes())))
 	}
 }
 
@@ -226,9 +257,10 @@ func (p *MessageServer) handleResponseMessage(ctx context.Context, headers *serv
 	p.pendMutex.RUnlock()
 	p.removeFromPending(headers.ReqID)
 	if okFoo {
+		// NOTE: need to make sure these callbacks do not block!
 		foo.okCallback(headers.Payload)
 	} else {
-		logger.With().Error("can't find handler", log.Uint64("p2p_request_id", headers.ReqID))
+		logger.With().Error("no response handler found", log.Uint64("p2p_request_id", headers.ReqID))
 	}
 	logger.Debug("handleResponseMessage close")
 }

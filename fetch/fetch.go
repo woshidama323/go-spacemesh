@@ -369,7 +369,7 @@ func (f *Fetch) FetchRequestHandler(ctx context.Context, data []byte) []byte {
 		}
 		res, err := db.Get(r.Hash.Bytes())
 		if err != nil {
-			f.log.WithContext(ctx).With().Warning("peer requested nonexistent hash", r.Hash, log.Err(err))
+			f.log.WithContext(ctx).With().Debug("peer requested nonexistent hash", r.Hash, log.Err(err))
 			continue
 		} else {
 			f.log.WithContext(ctx).With().Debug("responded to hash request", r.Hash, log.Int("bytes", len(res)))
@@ -454,7 +454,7 @@ func (f *Fetch) receiveResponse(data []byte) {
 		if f.stopped() {
 			return
 		}
-		f.log.With().Warning("hash not found in response from peer",
+		f.log.With().Debug("hash not found in response from peer",
 			log.String("hint", string(batchMap[h].Hint)),
 			h,
 			batch.peer)

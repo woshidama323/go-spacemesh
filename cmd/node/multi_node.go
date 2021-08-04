@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -207,6 +208,10 @@ func GracefulShutdown(apps []*SpacemeshApp) {
 			wg.Done()
 		}(app)
 	}
+	time.Sleep(10 * time.Second)
+	buf := make([]byte, 1<<16)
+	numbytes := runtime.Stack(buf, true)
+	fmt.Printf("%s", buf[:numbytes])
 	wg.Wait()
 
 	log.Info("graceful shutdown end")

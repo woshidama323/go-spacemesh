@@ -118,8 +118,7 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 	net := service.NewSimulator()
 	const (
 		numberOfEpochs = 5 // first 2 epochs are genesis
-		numOfInstances = 5
-		//numOfInstances = 10
+		numOfInstances = 2
 	)
 	cfg := getTestDefaultConfig(numOfInstances)
 	types.SetLayersPerEpoch(cfg.LayersPerEpoch)
@@ -180,7 +179,7 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 			suite.T().Fatalf("failed to start poet server: %v", err)
 		}
 
-		timeout := time.After(10 * time.Minute)
+		timeout := time.After(3 * time.Minute)
 
 		// Run setup first. We need to allow this to timeout, and monitor the failure channel too,
 		// as this can also loop forever.
