@@ -140,22 +140,23 @@ func (p *MessageServer) readLoop(ctx context.Context) {
 				//	log.Int("count", len(p.workerLimiter)),
 				//	log.Int("cap", cap(p.workerLimiter)))
 				//p.WithContext(ctx).Info("START handle message")
-				doneChan := make(chan struct{})
+				doneChan := make(chan struct{}, 1)
 				go func() {
 					p.handleMessage(ctx, msg)
-					select {
-					case doneChan <- struct{}{}:
-					case <-time.After(time.Second):
-						p.WithContext(ctx).With().Error("handle message listener disappeared")
-					}
+					doneChan <- struct{}{}
+					//select {
+					//case doneChan <- struct{}{}:
+					//case <-time.After(time.Second):
+					//	p.WithContext(ctx).With().Error("handle message listener disappeared")
+					//}
 				}()
 				select {
 				case <-doneChan:
 				case <-time.After(10 * time.Second):
 					//p.WithContext(ctx).With().Error("handle message timed out")
-					buf := make([]byte, 1<<16)
-					numbytes := runtime.Stack(buf, true)
-					fmt.Printf("%s", buf[:numbytes])
+					//buf := make([]byte, 1<<16)
+					//numbytes := runtime.Stack(buf, true)
+					//fmt.Printf("%s", buf[:numbytes])
 					panic("handle message timed out")
 				}
 				//p.WithContext(ctx).Info("END handle message")
