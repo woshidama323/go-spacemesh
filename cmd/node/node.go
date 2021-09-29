@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/spacemeshos/go-spacemesh/svm/state"
 	"io/ioutil"
 	"math/big"
 	"net/http"
@@ -17,6 +16,8 @@ import (
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/spacemeshos/go-spacemesh/svm/state"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/pyroscope-io/pyroscope/pkg/agent/profiler"
@@ -516,6 +517,35 @@ func (app *App) SetLogLevel(name, loglevel string) error {
 	return nil
 }
 
+type stores struct {
+	db, atxdbstore, tBeaconDBStore, poetDbStore, iddbstore, store *database.LDBDatabase
+}
+
+func (app *App) stores(dbStorePath string, lg log.Log) (*stores, error) {
+	dbNames := []string{"state", "atx", "tbeacon", "poet", "ids", "store"}
+	loggerNames := []string{StateDbLogger, AtxDbStoreLogger, TBeaconDbStoreLogger, PoetDbStoreLogger, StateDbLogger, StoreLogger}
+	dbs := []*database.LDBDatabase{}
+	for i, name := range dbNames {
+		path := filepath.Join(dbStorePath, name)
+		logger := app.addLogger(loggerNames[i], lg)
+		db, err := database.NewLDBDatabase(path, 0, 0, logger)
+		if err != nil {
+			return nil, err
+		}
+		app.closers = append(app.closers, db)
+		dbs = append(dbs, db)
+	}
+
+	return &stores{
+		dbs[0],
+		dbs[1],
+		dbs[2],
+		dbs[3],
+		dbs[4],
+		dbs[5],
+	}, nil
+}
+
 func (app *App) initServices(ctx context.Context,
 	nodeID types.NodeID,
 	swarm service.Service,
@@ -535,44 +565,13 @@ func (app *App) initServices(ctx context.Context,
 
 	app.log = app.addLogger(AppLogger, lg)
 
-	db, err := database.NewLDBDatabase(filepath.Join(dbStorepath, "state"), 0, 0, app.addLogger(StateDbLogger, lg))
+	stores, err := app.stores(dbStorepath, lg)
 	if err != nil {
 		return err
 	}
-	app.closers = append(app.closers, db)
 
-	atxdbstore, err := database.NewLDBDatabase(filepath.Join(dbStorepath, "atx"), 0, 0, app.addLogger(AtxDbStoreLogger, lg))
-	if err != nil {
-		return err
-	}
-	app.closers = append(app.closers, atxdbstore)
-
-	tBeaconDBStore, err := database.NewLDBDatabase(filepath.Join(dbStorepath, "tbeacon"), 0, 0, app.addLogger(TBeaconDbStoreLogger, lg))
-	if err != nil {
-		return err
-	}
-	app.closers = append(app.closers, tBeaconDBStore)
-
-	poetDbStore, err := database.NewLDBDatabase(filepath.Join(dbStorepath, "poet"), 0, 0, app.addLogger(PoetDbStoreLogger, lg))
-	if err != nil {
-		return err
-	}
-	app.closers = append(app.closers, poetDbStore)
-
-	iddbstore, err := database.NewLDBDatabase(filepath.Join(dbStorepath, "ids"), 0, 0, app.addLogger(StateDbLogger, lg))
-	if err != nil {
-		return err
-	}
-	app.closers = append(app.closers, iddbstore)
-
-	store, err := database.NewLDBDatabase(filepath.Join(dbStorepath, "store"), 0, 0, app.addLogger(StoreLogger, lg))
-	if err != nil {
-		return err
-	}
-	app.closers = append(app.closers, store)
-
-	idStore := activation.NewIdentityStore(iddbstore)
-	poetDb := activation.NewPoetDb(poetDbStore, app.addLogger(PoetDbLogger, lg))
+	idStore := activation.NewIdentityStore(stores.iddbstore)
+	poetDb := activation.NewPoetDb(stores.poetDbStore, app.addLogger(PoetDbLogger, lg))
 	validator := activation.NewValidator(poetDb, app.Config.POST)
 	mdb, err := mesh.NewPersistentMeshDB(filepath.Join(dbStorepath, "mesh"), app.Config.BlockCacheSize, app.addLogger(MeshDBLogger, lg))
 	if err != nil {
@@ -587,15 +586,15 @@ func (app *App) initServices(ctx context.Context,
 		return err
 	}
 	app.closers = append(app.closers, appliedTxs)
-	processor := state.NewTransactionProcessor(db, appliedTxs, meshAndPoolProjector, app.txPool, lg.WithName("state"))
+	processor := state.NewTransactionProcessor(stores.db, appliedTxs, meshAndPoolProjector, app.txPool, lg.WithName("state"))
 
 	goldenATXID := types.ATXID(types.HexToHash32(app.Config.GoldenATXID))
 	if goldenATXID == *types.EmptyATXID {
 		return errors.New("invalid golden atx id")
 	}
 
-	atxDB := activation.NewDB(atxdbstore, idStore, mdb, layersPerEpoch, goldenATXID, validator, app.addLogger(AtxDbLogger, lg))
-	tBeaconDB := tortoisebeacon.NewDB(tBeaconDBStore, app.addLogger(TBeaconDbLogger, lg))
+	atxDB := activation.NewDB(stores.atxdbstore, idStore, mdb, layersPerEpoch, goldenATXID, validator, app.addLogger(AtxDbLogger, lg))
+	tBeaconDB := tortoisebeacon.NewDB(stores.tBeaconDBStore, app.addLogger(TBeaconDbLogger, lg))
 
 	edVerifier := signing.NewEDVerifier()
 	vrfVerifier := signing.VRFVerifier{}
@@ -680,7 +679,7 @@ func (app *App) initServices(ctx context.Context,
 	remoteFetchService := fetch.NewFetch(ctx, app.Config.FETCH, swarm, app.addLogger(Fetcher, lg))
 
 	layerFetch := layerfetcher.NewLogic(ctx, app.Config.LAYERS, blockListener, atxDB, poetDb, atxDB, processor, swarm, remoteFetchService, msh, tBeaconDB, app.addLogger(LayerFetcher, lg))
-	layerFetch.AddDBs(mdb.Blocks(), atxdbstore, mdb.Transactions(), poetDbStore, tBeaconDBStore)
+	layerFetch.AddDBs(mdb.Blocks(), stores.atxdbstore, mdb.Transactions(), stores.poetDbStore, stores.tBeaconDBStore)
 
 	syncerConf := syncer.Configuration{
 		SyncInterval: time.Duration(app.Config.SyncInterval) * time.Second,
@@ -737,7 +736,7 @@ func (app *App) initServices(ctx context.Context,
 		app.log.Panic("failed to create post setup manager: %v", err)
 	}
 
-	nipostBuilder := activation.NewNIPostBuilder(util.Hex2Bytes(nodeID.Key), postSetupMgr, poetClient, poetDb, store, app.addLogger(NipostBuilderLogger, lg))
+	nipostBuilder := activation.NewNIPostBuilder(util.Hex2Bytes(nodeID.Key), postSetupMgr, poetClient, poetDb, stores.store, app.addLogger(NipostBuilderLogger, lg))
 
 	coinbaseAddr := types.HexToAddress(app.Config.SMESHING.CoinbaseAccount)
 	if app.Config.SMESHING.Start {
@@ -754,7 +753,7 @@ func (app *App) initServices(ctx context.Context,
 
 	atxBuilder := activation.NewBuilder(builderConfig, nodeID, sgn,
 		atxDB, swarm, msh, layersPerEpoch, nipostBuilder,
-		postSetupMgr, clock, newSyncer, store, app.addLogger("atxBuilder", lg),
+		postSetupMgr, clock, newSyncer, stores.store, app.addLogger("atxBuilder", lg),
 		activation.WithContext(ctx),
 	)
 
