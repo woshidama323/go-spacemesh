@@ -56,6 +56,10 @@ func TestAppliedBlock(t *testing.T) {
 	output, err = GetApplied(db, lid)
 	require.NoError(t, err)
 	require.Equal(t, expected, output)
+
+	require.NoError(t, UnsetApplied(db, lid))
+	_, err = GetApplied(db, lid)
+	require.ErrorIs(t, err, sql.ErrNotFound)
 }
 
 func TestStatus(t *testing.T) {

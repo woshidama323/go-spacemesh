@@ -275,7 +275,7 @@ func (t *ConStateAPIMock) GetLayerApplied(txID types.TransactionID) *types.Layer
 func (t *ConStateAPIMock) GetMeshTransaction(id types.TransactionID) (*types.MeshTransaction, error) {
 	tx, ok := t.returnTx[id]
 	if ok {
-		return &types.MeshTransaction{Transaction: *tx, State: types.PENDING}, nil
+		return &types.MeshTransaction{Transaction: *tx, State: types.BLOCK}, nil
 	}
 	tx, ok = t.poolByTxid[id]
 	if ok {
@@ -300,15 +300,16 @@ func (t *ConStateAPIMock) GetTransactionsByAddress(from, to types.LayerID, accou
 	return txs, nil
 }
 
-func (t *ConStateAPIMock) GetTransactions(txids []types.TransactionID) (txs []*types.Transaction, missing map[types.TransactionID]struct{}) {
+func (t *ConStateAPIMock) GetMeshTransactions(txids []types.TransactionID) ([]*types.MeshTransaction, map[types.TransactionID]struct{}) {
+	var txs []*types.MeshTransaction
 	for _, txid := range txids {
 		for _, tx := range t.returnTx {
 			if tx.ID() == txid {
-				txs = append(txs, tx)
+				txs = append(txs, &types.MeshTransaction{Transaction: *tx})
 			}
 		}
 	}
-	return
+	return txs, nil
 }
 
 func (t *ConStateAPIMock) GetLayerStateRoot(types.LayerID) (types.Hash32, error) {
@@ -3085,7 +3086,7 @@ func TestEventsReceived(t *testing.T) {
 	lg := logtest.New(t).WithName("svm")
 	svm := svm.New(database.NewMemDatabase(), appliedTxsMock{}, lg)
 	conState := txs.NewConservativeState(svm, sql.InMemory(), logtest.New(t).WithName("conState"))
-	conState.AddTxToMemPool(globalTx, true)
+	conState.AddToMempool(globalTx, true, true)
 	time.Sleep(100 * time.Millisecond)
 
 	rewards := map[types.Address]uint64{

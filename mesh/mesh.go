@@ -109,7 +109,7 @@ func NewRecoveredMesh(db *DB, atxDb AtxDB, trtl tortoise, state conservativeStat
 		logger.With().Panic("failed to recover latest layer in state", log.Err(err))
 	}
 
-	_, err = state.Rewind(msh.LatestLayerInState())
+	_, err = state.RevertState(msh.LatestLayerInState())
 	if err != nil {
 		logger.With().Panic("failed to load state for layer", msh.LatestLayerInState(), log.Err(err))
 	}
@@ -331,8 +331,9 @@ func (msh *Mesh) revertMaybe(ctx context.Context, logger log.Log, newVerified ty
 		return nil
 	}
 
-	logger.With().Info("reverting state to layer", log.Uint32("revert_to", revertTo.Uint32()))
-	if err := msh.revertState(ctx, revertTo); err != nil {
+	logger = logger.WithFields(log.Stringer("revert_to", revertTo))
+	logger.Info("reverting state to layer")
+	if err := msh.revertState(logger, revertTo); err != nil {
 		logger.With().Error("failed to revert state",
 			log.Uint32("revert_to", revertTo.Uint32()),
 			log.Err(err))
@@ -531,50 +532,64 @@ func (msh *Mesh) pushLayer(ctx context.Context, layerID, latestVerified types.La
 		msh.With().Error("failed to persist layer hashes", layerID, log.Err(err))
 		return err
 	}
-
-	if err = msh.reInsertTxsToPool(toApply, others); err != nil {
-		return fmt.Errorf("failed to reinsert TXs to pool %s: %w", layerID, err)
-	}
 	return nil
 }
+
+//func (msh *Mesh) getAppliedBlocks(logger log.Log, from, to types.LayerID) ([]*types.Block, error) {
+//	if to.Before(from) {
+//		logger.With().Panic("invalid from/to", log.Stringer("from", from), log.Stringer("to", to))
+//	}
+//
+//	blocks := make([]*types.Block, 0, to.Uint32()-from.Uint32()+1)
+//	for lid := from; !lid.After(to); lid = lid.Add(1) {
+//		applied, err := layers.GetApplied(msh.db, lid)
+//		if err != nil {
+//			return nil, fmt.Errorf("get applied %v: %w", lid, err)
+//		}
+//		block, err := msh.getBlock(applied)
+//		if err != nil {
+//			return nil, fmt.Errorf("get block %v: %w", lid, err)
+//		}
+//		blocks = append(blocks, block)
+//	}
+//	return blocks, nil
+//}
 
 // RevertState reverts to state as of a previous layer.
-func (msh *Mesh) revertState(ctx context.Context, layerID types.LayerID) error {
-	logger := msh.WithContext(ctx).WithFields(layerID)
-	logger.Info("attempting to roll back state to previous layer")
-	if _, err := msh.conState.Rewind(layerID); err != nil {
-		return fmt.Errorf("failed to revert state to layer %v: %w", layerID, err)
-	}
-	return nil
-}
+func (msh *Mesh) revertState(logger log.Log, revertTo types.LayerID) error {
+	// collect all the blocks that need to be un-applied
+	latest := msh.LatestLayerInState()
+	//from := revertTo.Add(1)
+	//blocksToUndo, err := msh.getAppliedBlocks(logger, from, latest)
+	//if err != nil {
+	//	return err
+	//}
 
-func (msh *Mesh) reInsertTxsToPool(applied *types.Block, notApplied []*types.Block) error {
-	seenTxIds := make(map[types.TransactionID]struct{})
-	if applied != nil {
-		uniqueTxIds([]*types.Block{applied}, seenTxIds) // run for the side effect, updating seenTxIds
+	root, err := msh.conState.RevertState(revertTo)
+	if err != nil {
+		return fmt.Errorf("revert state to layer %v: %w", revertTo, err)
 	}
-
-	reinsert := uniqueTxIds(notApplied, seenTxIds)
-	if len(reinsert) > 0 {
-		// We ignore errors here, since they mean that the tx is no longer
-		// valid and we shouldn't re-add it.
-		_ = msh.conState.ReinsertTxsToMemPool(reinsert)
+	logger.With().Info("successfully reverted state", log.Stringer("state_root", root))
+	for i := revertTo.Add(1); !i.After(latest); i = i.Add(1) {
+		if err := layers.UnsetApplied(msh.db, i); err != nil {
+			return fmt.Errorf("unset applied for layer %v: %w", i, err)
+		}
 	}
 	return nil
 }
 
 func (msh *Mesh) applyState(block *types.Block) error {
-	rewardByMiner := map[types.Address]uint64{}
-	for _, r := range block.Rewards {
-		rewardByMiner[r.Address] += r.Amount
-	}
-	failedTxs, err := msh.conState.ApplyLayer(block.LayerIndex, block.ID(), block.TxIDs, rewardByMiner)
+	failedTxs, err := msh.conState.ApplyLayer(block)
 	if err != nil {
 		msh.With().Error("failed to apply transactions",
-			block.LayerIndex, log.Int("num_failed_txs", len(failedTxs)), log.Err(err))
-		// TODO: We want to panic here once we have a way to "remember" that we didn't apply these txs
-		//  e.g. persist the last layer transactions were applied from and use that instead of `oldVerified`
+			block.LayerIndex,
+			log.Int("num_failed_txs", len(failedTxs)),
+			log.Err(err))
 		return fmt.Errorf("apply layer: %w", err)
+	}
+
+	if err := layers.SetApplied(msh.db, block.LayerIndex, block.ID()); err != nil {
+		return fmt.Errorf("set applied block: %w", err)
 	}
 
 	if err := msh.DB.writeTransactionRewards(block.LayerIndex, block.Rewards); err != nil {
@@ -665,20 +680,6 @@ func (msh *Mesh) GetAggregatedLayerHash(layerID types.LayerID) types.Hash32 {
 	return h
 }
 
-func uniqueTxIds(blocks []*types.Block, seenTxIds map[types.TransactionID]struct{}) []types.TransactionID {
-	var txIds []types.TransactionID
-	for _, b := range blocks {
-		for _, id := range b.TxIDs {
-			if _, found := seenTxIds[id]; found {
-				continue
-			}
-			txIds = append(txIds, id)
-			seenTxIds[id] = struct{}{}
-		}
-	}
-	return txIds
-}
-
 var errLayerHasBlock = errors.New("layer has block")
 
 // SetZeroBlockLayer tags lyr as a layer without blocks.
@@ -709,11 +710,12 @@ func (msh *Mesh) SetZeroBlockLayer(lyr types.LayerID) error {
 // AddTXsFromProposal adds the TXs in a Proposal into the database.
 func (msh *Mesh) AddTXsFromProposal(ctx context.Context, layerID types.LayerID, proposalID types.ProposalID, txIDs []types.TransactionID) error {
 	logger := msh.WithContext(ctx).WithFields(layerID, proposalID, log.Int("num_txs", len(txIDs)))
-	logger.Debug("adding proposal txs to mesh")
-	if err := msh.addTransactionsForBlock(logger, layerID, types.EmptyBlockID, txIDs); err != nil {
+	if err := msh.conState.LinkTXsWithProposal(layerID, proposalID, txIDs); err != nil {
+		logger.With().Error("failed to link proposal txs", log.Err(err))
 		return err
 	}
-	logger.Info("added proposal's txs to database")
+	msh.setLatestLayer(layerID)
+	logger.Debug("associated txs to proposal")
 	return nil
 }
 
@@ -729,24 +731,18 @@ func (msh *Mesh) AddBallot(ballot *types.Ballot) error {
 // AddBlockWithTXs adds the block and its TXs in into the database.
 func (msh *Mesh) AddBlockWithTXs(ctx context.Context, block *types.Block) error {
 	logger := msh.WithContext(ctx).WithFields(block.LayerIndex, block.ID(), log.Int("num_txs", len(block.TxIDs)))
-	logger.Debug("adding block txs to mesh")
-	if err := msh.addTransactionsForBlock(logger, block.LayerIndex, block.ID(), block.TxIDs); err != nil {
+	if err := msh.conState.LinkTXsWithBlock(block.LayerIndex, block.ID(), block.TxIDs); err != nil {
+		logger.With().Error("failed to link block txs", log.Err(err))
 		return err
 	}
+	msh.setLatestLayer(block.LayerIndex)
+	logger.Debug("associated txs to block")
+
 	if err := msh.AddBlock(block); err != nil {
 		return err
 	}
+	logger.Debug("added block txs to mesh")
 	msh.trtl.OnBlock(block)
-	return nil
-}
-
-func (msh *Mesh) addTransactionsForBlock(logger log.Log, layerID types.LayerID, blockID types.BlockID, txIDs []types.TransactionID) error {
-	if err := msh.conState.StoreTransactionsFromMemPool(layerID, blockID, txIDs); err != nil {
-		logger.With().Error("not all txs were processed", log.Err(err))
-		return err
-	}
-	msh.setLatestLayer(layerID)
-	logger.Info("added txs to database")
 	return nil
 }
 

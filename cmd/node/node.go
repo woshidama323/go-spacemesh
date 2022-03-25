@@ -59,6 +59,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/tortoise"
 	"github.com/spacemeshos/go-spacemesh/turbohare"
 	"github.com/spacemeshos/go-spacemesh/txs"
+	"github.com/spacemeshos/go-spacemesh/txs/handler"
 )
 
 const edKeyFileName = "key.bin"
@@ -571,7 +572,7 @@ func (app *App) initServices(ctx context.Context,
 	blockHandller := blocks.NewHandler(fetcherWrapped, msh,
 		blocks.WithLogger(app.addLogger(BlockHandlerLogger, lg)))
 
-	txHandler := txs.NewTxHandler(app.conState, app.addLogger(TxHandlerLogger, lg))
+	txHandler := handler.NewTxHandler(app.conState, app.addLogger(TxHandlerLogger, lg))
 
 	dbStores := fetch.LocalDataSource{
 		fetch.BallotDB:   msh.Ballots(),
@@ -673,7 +674,7 @@ func (app *App) initServices(ctx context.Context,
 		pubsub.ChainGossipHandler(syncHandler, beaconProtocol.HandleFollowingVotes))
 	app.host.Register(proposals.NewProposalProtocol, pubsub.ChainGossipHandler(syncHandler, proposalListener.HandleProposal))
 	app.host.Register(activation.AtxProtocol, pubsub.ChainGossipHandler(syncHandler, atxDB.HandleGossipAtx))
-	app.host.Register(txs.IncomingTxProtocol, pubsub.ChainGossipHandler(syncHandler, txHandler.HandleGossipTransaction))
+	app.host.Register(handler.IncomingTxProtocol, pubsub.ChainGossipHandler(syncHandler, txHandler.HandleGossipTransaction))
 	app.host.Register(activation.PoetProofProtocol, poetListener.HandlePoetProofMessage)
 
 	app.proposalBuilder = proposalBuilder

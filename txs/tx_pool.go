@@ -45,11 +45,11 @@ func (tp *txPool) has(txID types.TransactionID) bool {
 	return tp.txs[txID] != nil
 }
 
-func (tp *txPool) add(id types.TransactionID, tx *types.Transaction) {
+func (tp *txPool) add(tx *types.Transaction) {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
 
-	tp.txs[id] = tx
+	tp.txs[tx.ID()] = tx
 	account, found := tp.accounts[tx.Origin()]
 	if !found {
 		account = newAccountPendingTxs()

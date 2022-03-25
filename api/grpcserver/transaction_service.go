@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/spacemeshos/go-spacemesh/txs/handler"
+
 	pb "github.com/spacemeshos/api/release/go/spacemesh/v1"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
@@ -15,7 +17,6 @@ import (
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/events"
 	"github.com/spacemeshos/go-spacemesh/log"
-	"github.com/spacemeshos/go-spacemesh/txs"
 )
 
 // TransactionService exposes transaction data, and a submit tx endpoint.
@@ -66,7 +67,7 @@ func (s TransactionService) SubmitTransaction(ctx context.Context, in *pb.Submit
 			"`Transaction` must contain a valid, serialized transaction")
 	}
 
-	if err := s.publisher.Publish(ctx, txs.IncomingTxProtocol, in.Transaction); err != nil {
+	if err := s.publisher.Publish(ctx, handler.IncomingTxProtocol, in.Transaction); err != nil {
 		log.Error("error broadcasting incoming tx: %v", err)
 		return nil, status.Error(codes.Internal, "Failed to publish transaction")
 	}
@@ -91,17 +92,14 @@ func (s TransactionService) getTransactionAndStatus(txID types.TransactionID) (*
 	switch tx.State {
 	case types.MEMPOOL:
 		state = pb.TransactionState_TRANSACTION_STATE_MEMPOOL
-	case types.PENDING:
+	case types.PROPOSAL, types.BLOCK:
 		state = pb.TransactionState_TRANSACTION_STATE_MESH
 	case types.APPLIED:
 		state = pb.TransactionState_TRANSACTION_STATE_PROCESSED
+	case types.DISCARDED:
+		state = pb.TransactionState_TRANSACTION_STATE_REJECTED
 	default:
-		nonce := s.conState.GetNonce(tx.Origin())
-		if nonce > tx.AccountNonce {
-			state = pb.TransactionState_TRANSACTION_STATE_REJECTED
-		} else {
-			state = pb.TransactionState_TRANSACTION_STATE_UNSPECIFIED
-		}
+		state = pb.TransactionState_TRANSACTION_STATE_UNSPECIFIED
 	}
 	return &tx.Transaction, state
 }

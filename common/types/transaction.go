@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spacemeshos/ed25519"
 
@@ -172,28 +173,28 @@ func SortTransactionIDs(ids []TransactionID) []TransactionID {
 type TXState int
 
 const (
-	// PENDING represents the state when a transaction is in a proposal or a not-applied block.
+	// PENDING represents the state when a transaction is syntactically valid, but its nonce and
+	// the principal's ability to cover gas have not been verified yet.
 	PENDING TXState = iota
-	// APPLIED represents the state when a transaction is applied to the state.
-	APPLIED
-	// DELETED represents the state when a transaction is re-inserted into mempool
-	// NOTE(dshulyak) transaction is marked as deleted, instead of deleting it
-	// to avoid problems with data availability until we handle it properly.
-	DELETED
-
-	// only PENDING/APPLIED/DELETED are represented in the DB currently.
-	// TODO: change to the states described in https://github.com/spacemeshos/go-spacemesh/issues/3094
-
 	// MEMPOOL represents the state when a transaction is in mempool.
 	MEMPOOL
+	// PROPOSAL represents the state when a transaction is in a proposal.
+	PROPOSAL
+	// BLOCK represents the state when a transaction is in a not-applied block.
+	BLOCK
+	// APPLIED represents the state when a transaction is applied to the state.
+	APPLIED
+	// DISCARDED represents the state when a transaction is rejected due to bad nonce or insufficient balance.
+	DISCARDED
 )
 
 // MeshTransaction is stored in the mesh and included in the block.
 type MeshTransaction struct {
 	Transaction
-	LayerID LayerID
-	BlockID BlockID
-	State   TXState
+	LayerID  LayerID
+	BlockID  BlockID
+	Received time.Time
+	State    TXState
 }
 
 // InnerTransaction includes all of a transaction's fields, except the signature (origin and id aren't stored).
@@ -212,4 +213,49 @@ type Reward struct {
 	LayerRewardEstimate uint64
 	SmesherID           NodeID
 	Coinbase            Address
+}
+
+// NanoTX represents minimal info about a transaction for the conservative cache/mempool.
+type NanoTX struct {
+	Tid       TransactionID
+	Principal Address
+	Fee       uint64
+	Received  time.Time
+
+	Amount uint64
+	Nonce  uint64
+	Block  BlockID
+	Layer  LayerID
+}
+
+// NewNanoTX converts a NanoTX instance from a MeshTransaction.
+func NewNanoTX(mtx *MeshTransaction) *NanoTX {
+	return &NanoTX{
+		Tid:       mtx.ID(),
+		Principal: mtx.Origin(),
+		Fee:       mtx.GetFee(),
+		Amount:    mtx.Amount,
+		Nonce:     mtx.AccountNonce,
+		Received:  mtx.Received,
+		Block:     mtx.BlockID,
+		Layer:     mtx.LayerID,
+	}
+}
+
+// MaxSpending returns the maximal amount a transaction can spend.
+func (n *NanoTX) MaxSpending() uint64 {
+	// TODO: create SVM methods to calculate these two fields
+	return n.Fee + n.Amount
+}
+
+// Better returns true if this transaction takes priority than `other`.
+func (n *NanoTX) Better(other *NanoTX) bool {
+	return n.Fee > other.Fee || n.Fee == other.Fee && n.Received.Before(other.Received)
+}
+
+// UpdateLayerMaybe updates the layer of a transaction if it's lower than the current value.
+func (n *NanoTX) UpdateLayerMaybe(lid LayerID) {
+	if n.Layer == (LayerID{}) || lid.Before(n.Layer) {
+		n.Layer = lid
+	}
 }

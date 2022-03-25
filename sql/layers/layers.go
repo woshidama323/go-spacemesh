@@ -84,6 +84,17 @@ func SetApplied(db sql.Executor, lid types.LayerID, applied types.BlockID) error
 	return nil
 }
 
+// UnsetApplied updates the applied block for the layer to nil.
+func UnsetApplied(db sql.Executor, lid types.LayerID) error {
+	if _, err := db.Exec("update layers set applied_block = null where id = ?1;",
+		func(stmt *sql.Statement) {
+			stmt.BindInt64(1, int64(lid.Value))
+		}, nil); err != nil {
+		return fmt.Errorf("unset applied %s: %w", lid, err)
+	}
+	return nil
+}
+
 // GetApplied for the applied block for layer.
 func GetApplied(db sql.Executor, lid types.LayerID) (rst types.BlockID, err error) {
 	if rows, err := db.Exec("select applied_block from layers where id = ?1;",
