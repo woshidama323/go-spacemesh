@@ -124,35 +124,42 @@ func Apply(db sql.Executor, tid types.TransactionID, lid types.LayerID, bid type
 	return rows, nil
 }
 
-func UndoLayers(db sql.Executor, from types.LayerID) error {
+func UndoLayers(db sql.Executor, from types.LayerID) ([]types.TransactionID, error) {
+	var updated []types.TransactionID
 	_, err := db.Exec(`
 		update transactions set applied = ?2, layer = ?3, block = ?4 where layer between ?1 and
-		(select max(layer) from transactions)`,
+		(select max(layer) from transactions) returning id`,
 		func(stmt *sql.Statement) {
 			stmt.BindInt64(1, int64(from.Value))
 			stmt.BindInt64(2, statePending)
 			stmt.BindInt64(3, int64(types.LayerID{}.Value))
 			stmt.BindBytes(4, types.EmptyBlockID.Bytes())
-		}, nil)
+		}, func(stmt *sql.Statement) bool {
+			var tid types.TransactionID
+			stmt.ColumnBytes(0, tid[:])
+			updated = append(updated, tid)
+			return true
+		})
 	if err != nil {
-		return fmt.Errorf("undo layer %s: %w", from, err)
+		return nil, fmt.Errorf("undo layer %s: %w", from, err)
 	}
-	return nil
+	return updated, nil
 }
 
-// Discard sets the applied field to `stateDiscarded` and the layer at which the transaction was discarded.
-func Discard(db sql.Executor, tid types.TransactionID) (int, error) {
-	rows, err := db.Exec(`update transactions set applied = ?2, layer = ?3, block = ?4 where id = ?1 returning id`,
+// DiscardNonceBelow sets the applied field to `stateDiscarded` for transactions with nonce lower than specified.
+func DiscardNonceBelow(db sql.Executor, address types.Address, nonce uint64) error {
+	_, err := db.Exec(`update transactions set applied = ?3, layer = ?4, block = ?5 where origin = ?1 and nonce < ?2`,
 		func(stmt *sql.Statement) {
-			stmt.BindBytes(1, tid.Bytes())
-			stmt.BindInt64(2, stateDiscarded)
-			stmt.BindInt64(3, int64(types.LayerID{}.Value))
-			stmt.BindBytes(4, types.EmptyBlockID.Bytes())
+			stmt.BindBytes(1, address.Bytes())
+			stmt.BindInt64(2, int64(nonce))
+			stmt.BindInt64(3, stateDiscarded)
+			stmt.BindInt64(4, int64(types.LayerID{}.Value))
+			stmt.BindBytes(5, types.EmptyBlockID.Bytes())
 		}, nil)
 	if err != nil {
-		return 0, fmt.Errorf("discard %s: %w", tid, err)
+		return fmt.Errorf("discard nonce below %s/%d: %w", address, nonce, err)
 	}
-	return rows, nil
+	return nil
 }
 
 func DiscardByAcctNonce(db sql.Executor, applied types.TransactionID, lid types.LayerID, addr types.Address, nonce uint64) error {
@@ -345,16 +352,16 @@ func GetAcctPendingFromNonce(db sql.Executor, address types.Address, from uint64
 }
 
 // GetAcctPendingAtNonce get all pending transactions with nonce == `from` for the given address.
-func GetAcctPendingAtNonce(db sql.Executor, address types.Address, nonce uint64) ([]*types.MeshTransaction, error) {
-	return queryPending(db, `
-		select tx, layer, block, origin, timestamp, id from transactions
-		where applied = ?1 and origin = ?2 and nonce = ?3 order by nonce asc`,
-		func(stmt *sql.Statement) {
-			stmt.BindInt64(1, statePending)
-			stmt.BindBytes(2, address.Bytes())
-			stmt.BindInt64(3, int64(nonce))
-		}, "get acct pending at nonce")
-}
+//func GetAcctPendingAtNonce(db sql.Executor, address types.Address, nonce uint64) ([]*types.MeshTransaction, error) {
+//	return queryPending(db, `
+//		select tx, layer, block, origin, timestamp, id from transactions
+//		where applied = ?1 and origin = ?2 and nonce = ?3 order by nonce asc`,
+//		func(stmt *sql.Statement) {
+//			stmt.BindInt64(1, statePending)
+//			stmt.BindBytes(2, address.Bytes())
+//			stmt.BindInt64(3, int64(nonce))
+//		}, "get acct pending at nonce")
+//}
 
 // query MUST ensure that this order of fields tx, layer, block, origin, timestamp, id.
 func queryPending(db sql.Executor, query string, encoder func(*sql.Statement), errStr string) (rst []*types.MeshTransaction, err error) {

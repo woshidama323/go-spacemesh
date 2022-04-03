@@ -15,10 +15,11 @@ import (
 // nonce and balances for pending transactions in un-applied blocks and mempool.
 type ConservativeState struct {
 	svmState
+	*cache
 
 	logger log.Log
 	store  txProvider
-	cache  *cache
+	//cache  *cache
 }
 
 // NewConservativeState returns a ConservativeState.
@@ -26,8 +27,8 @@ func NewConservativeState(state svmState, db *sql.Database, logger log.Log) *Con
 	s := newStore(db, logger)
 	return &ConservativeState{
 		svmState: state,
-		store:    s,
 		cache:    newCache(s, state, logger),
+		store:    s,
 		logger:   logger,
 	}
 }
@@ -48,11 +49,11 @@ func (cs *ConservativeState) SelectTXsForProposal(numTXs int) ([]types.Transacti
 
 // GetProjection returns the projected nonce and balance for the address with pending transactions
 // in un-applied blocks and mempool.
-func (cs *ConservativeState) GetProjection(addr types.Address) (uint64, uint64, error) {
-	// TODO return error if cache is not yet active
-	nonce, balance := cs.cache.GetProjection(addr)
-	return nonce, balance, nil
-}
+//func (cs *ConservativeState) GetProjection(addr types.Address) (uint64, uint64, error) {
+//	// TODO return error if cache is not yet active
+//	nonce, balance := cs.cache.GetProjection(addr)
+//	return nonce, balance, nil
+//}
 
 // HasTx returns true if we already have this transaction in tp.
 func (cs *ConservativeState) HasTx(tid types.TransactionID) (bool, error) {
@@ -75,25 +76,25 @@ func (cs *ConservativeState) AddToCache(tx *types.Transaction, newTX bool) error
 	return cs.cache.Add(tx, received)
 }
 
-func (cs *ConservativeState) LinkTXsWithProposal(lid types.LayerID, pid types.ProposalID, tids []types.TransactionID) error {
-	if len(tids) == 0 {
-		return nil
-	}
-	if err := cs.store.AddToProposal(lid, pid, tids); err != nil {
-		return err
-	}
-	return cs.cache.AddToLayer(lid, tids)
-}
-
-func (cs *ConservativeState) LinkTXsWithBlock(lid types.LayerID, bid types.BlockID, tids []types.TransactionID) error {
-	if len(tids) == 0 {
-		return nil
-	}
-	if err := cs.store.AddToBlock(lid, bid, tids); err != nil {
-		return err
-	}
-	return cs.cache.AddToLayer(lid, tids)
-}
+//func (cs *ConservativeState) LinkTXsWithProposal(lid types.LayerID, pid types.ProposalID, tids []types.TransactionID) error {
+//	if len(tids) == 0 {
+//		return nil
+//	}
+//	if err := cs.store.AddToProposal(lid, pid, tids); err != nil {
+//		return err
+//	}
+//	return cs.cache.AddToLayer(lid, types.EmptyBlockID, tids)
+//}
+//
+//func (cs *ConservativeState) LinkTXsWithBlock(lid types.LayerID, bid types.BlockID, tids []types.TransactionID) error {
+//	if len(tids) == 0 {
+//		return nil
+//	}
+//	if err := cs.store.AddToBlock(lid, bid, tids); err != nil {
+//		return err
+//	}
+//	return cs.cache.AddToLayer(lid, bid, tids)
+//}
 
 // GetMeshTransaction retrieves a tx by its id.
 func (cs *ConservativeState) GetMeshTransaction(tid types.TransactionID) (*types.MeshTransaction, error) {
@@ -128,13 +129,7 @@ func (cs *ConservativeState) RevertState(revertTo types.LayerID) (types.Hash32, 
 		return root, fmt.Errorf("svm rewind to %v: %w", revertTo, err)
 	}
 
-	if err = cs.store.UndoLayers(revertTo.Add(1)); err != nil {
-		return root, err
-	}
-
-	// TODO revert the rewards also. https://github.com/spacemeshos/go-spacemesh/issues/3057
-
-	return root, cs.cache.BuildFromScratch()
+	return root, cs.cache.RevertToLayer(revertTo)
 }
 
 // ApplyLayer applies the transactions specified by the ids to the state.

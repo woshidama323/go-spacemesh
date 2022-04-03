@@ -2,7 +2,10 @@ package txs
 
 import (
 	"context"
+	"fmt"
 	"time"
+
+	"github.com/spacemeshos/go-spacemesh/sql/layers"
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/log"
@@ -20,6 +23,10 @@ func newStore(db *sql.Database, logger log.Log) *store {
 		logger: logger,
 		db:     db,
 	}
+}
+
+func (s *store) LastAppliedLayer() (types.LayerID, error) {
+	return layers.GetLastApplied(s.db)
 }
 
 // Add adds a transaction to the database.
@@ -114,12 +121,28 @@ func (s *store) ApplyLayer(lid types.LayerID, bid types.BlockID, addr types.Addr
 
 // DiscardNonceBelow discards pending transactions with nonce lower than `nonce`.
 func (s *store) DiscardNonceBelow(addr types.Address, nonce uint64) error {
-	return nil
+	return transactions.DiscardNonceBelow(s.db, addr, nonce)
 }
 
-// UndoLayers resets all transactions that were applied/discarded between `from` and the most recent layer.
+// UndoLayers resets all transactions that were applied/discarded between `from` and the most recent layer,
+// and reset their layers if they were included in a proposal/block
 func (s *store) UndoLayers(from types.LayerID) error {
-	return transactions.UndoLayers(s.db, from)
+	dbtx, err := s.db.Tx(context.Background())
+	if err != nil {
+		return err
+	}
+	defer dbtx.Release()
+
+	tids, err := transactions.UndoLayers(s.db, from)
+	if err != nil {
+		return fmt.Errorf("undo %w", err)
+	}
+	for _, tid := range tids {
+		if _, _, err := transactions.SetNextLayer(s.db, tid, from.Sub(1)); err != nil {
+			return fmt.Errorf("reset for undo %w", err)
+		}
+	}
+	return dbtx.Commit()
 }
 
 // SetNextLayerBlock sets and returns the next applicable layer/block for the transaction.
@@ -133,9 +156,9 @@ func (s *store) GetAllPending() ([]*types.MeshTransaction, error) {
 }
 
 // GetAcctPendingAtNonce gets all pending transactions with nonce == `nonce` for an account.
-func (s *store) GetAcctPendingAtNonce(addr types.Address, nonce uint64) ([]*types.MeshTransaction, error) {
-	return transactions.GetAcctPendingAtNonce(s.db, addr, nonce)
-}
+//func (s *store) GetAcctPendingAtNonce(addr types.Address, nonce uint64) ([]*types.MeshTransaction, error) {
+//	return transactions.GetAcctPendingAtNonce(s.db, addr, nonce)
+//}
 
 // GetAcctPendingFromNonce gets all pending transactions with nonce <= `from` for an account.
 func (s *store) GetAcctPendingFromNonce(addr types.Address, from uint64) ([]*types.MeshTransaction, error) {

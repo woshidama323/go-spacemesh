@@ -116,6 +116,19 @@ func GetApplied(db sql.Executor, lid types.LayerID) (rst types.BlockID, err erro
 	return rst, err
 }
 
+// GetLastApplied for the applied block for layer.
+func GetLastApplied(db sql.Executor) (types.LayerID, error) {
+	var lid types.LayerID
+	if _, err := db.Exec("select max(id) from layers where applied_block is not null", nil,
+		func(stmt *sql.Statement) bool {
+			lid = types.NewLayerID(uint32(stmt.ColumnInt64(0)))
+			return true
+		}); err != nil {
+		return lid, fmt.Errorf("last applied: %w", err)
+	}
+	return lid, nil
+}
+
 // SetStatus updates status of the layer.
 func SetStatus(db sql.Executor, lid types.LayerID, status Status) error {
 	if _, err := db.Exec(`insert into mesh_status (layer, status) values (?1, ?2) 
