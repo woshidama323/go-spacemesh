@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/libp2p/go-libp2p-core/peer"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/spacemeshos/go-spacemesh/codec"
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/common/util"
 	"github.com/spacemeshos/go-spacemesh/eligibility"
@@ -149,7 +151,7 @@ func Test_consensusIterations(t *testing.T) {
 	require.NoError(t, err)
 
 	test.initialSets = make([]*Set, totalNodes)
-	set1 := NewSetFromValues(value1)
+	set1 := NewSetFromValues(value1, value2)
 	test.fill(set1, 0, totalNodes-1)
 	test.honestSets = []*Set{set1}
 	oracle := eligibility.New(logtest.New(t))
@@ -201,7 +203,15 @@ func createTestHare(t testing.TB, db *sql.Database, tcfg config.Config, clock *m
 
 	hare := New(db, tcfg, pid, p2p, ed, nodeID, mockBlockGen, mockSyncS, mockMeshDB, mockBeacons, mockFetcher, mockRoracle, patrol, 10,
 		mockStateQ, clock, logtest.New(t).WithName(name+"_"+ed.PublicKey().ShortString()))
-	p2p.Register(ProtoName, hare.GetHareMsgHandler())
+
+	msgHandler := hare.GetHareMsgHandler()
+	msgPrinter := func(ctx context.Context, pid peer.ID, msgBytes []byte) pubsub.ValidationResult {
+		m := &Message{}
+		codec.Decode(msgBytes, m)
+		fmt.Printf(" %s %d", m.InnerMsg.Type.String(), len(msgBytes))
+		return msgHandler(ctx, pid, msgBytes)
+	}
+	p2p.Register(ProtoName, msgPrinter)
 
 	return &hareWithMocks{
 		Hare:         hare,
@@ -390,7 +400,7 @@ func Test_multipleCPs(t *testing.T) {
 	r := require.New(t)
 	totalCp := uint32(3)
 	test := newHareWrapper(totalCp)
-	totalNodes := 10
+	totalNodes := 20
 	cfg := config.Config{N: totalNodes, F: totalNodes/2 - 1, RoundDuration: 5, ExpectedLeaders: 5, LimitIterations: 1000, LimitConcurrent: 100}
 
 	ctx, cancel := context.WithCancel(context.Background())

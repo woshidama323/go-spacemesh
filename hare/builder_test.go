@@ -1,12 +1,16 @@
 package hare
 
 import (
+	"encoding/hex"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/spacemeshos/go-spacemesh/codec"
+	"github.com/spacemeshos/go-spacemesh/common/types"
+	"github.com/spacemeshos/go-spacemesh/hash"
 	"github.com/spacemeshos/go-spacemesh/signing"
 )
 
@@ -47,4 +51,35 @@ func TestMessageBuilder_SetCertificate(t *testing.T) {
 	c := newMessageBuilder().SetCertificate(cert).Build().Message
 	cert2 := marshallUnmarshall(t, c).InnerMsg.Cert
 	assert.Equal(t, cert.Values, cert2.Values)
+}
+
+func TestMessageBuilder_CommitCertificateSize(t *testing.T) {
+	setSize := 1                  // # of proposal IDs in set (40 bytes per element in set)
+	consensusThreshold := 5       // # of commits (112 bytes per included commit)
+	expectedMessageBytes := 46980 // = (68 magical bytes) + 50 * (40bytes/element) + 401 * (112byte/commit)
+	// Build new proposalID set
+	s := NewEmptySet(setSize)
+	for i := 0; i < setSize; i++ {
+		uselessTX := hash.Sum([]byte(strconv.Itoa(i)))
+		var txs []types.TransactionID
+		txs = append(txs, uselessTX)
+		pID := types.GenLayerProposal(types.NewLayerID(1), txs).ID()
+		s.Add(pID)
+	}
+	// Create commit certificate from commits to the set
+	tr := newCommitTracker(consensusThreshold, consensusThreshold, s)
+	for i := 0; i < consensusThreshold; i++ {
+		commitMsg := BuildCommitMsg(signing.NewEdSigner(), s)
+		buf, _ := codec.Encode(commitMsg.Bytes())
+		println(hex.EncodeToString(buf))
+		println()
+		tr.OnCommit(commitMsg)
+	}
+	cert := tr.BuildCertificate()
+	// Put'em in a message and encode.
+	msg := newMessageBuilder().SetType(notify).SetValues(s).SetCertificate(cert).Build()
+	buf, err := codec.Encode(msg.Bytes())
+	println(hex.EncodeToString(buf))
+	require.NoError(t, err)
+	assert.Equal(t, expectedMessageBytes, len(buf))
 }
