@@ -9,7 +9,7 @@ keep ?= false
 clusters ?= 1
 size ?= 10
 level ?= debug
-bootstrap ?= 5m
+bootstrap ?= 1m
 storage ?= standard=1Gi
 node_selector ?=
 namespace ?=

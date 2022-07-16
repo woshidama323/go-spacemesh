@@ -530,7 +530,7 @@ func (msh *Mesh) pushLayer(ctx context.Context, lid, verified types.LayerID) err
 	if err != nil {
 		return err
 	}
-	if err = msh.applyState(logger, lid, valids); err != nil {
+	if err = msh.applyState(ctx, logger, lid, valids); err != nil {
 		return err
 	}
 	msh.setLatestLayerInState(lid)
@@ -546,12 +546,12 @@ func (msh *Mesh) pushLayer(ctx context.Context, lid, verified types.LayerID) err
 // applyState applies the block to the conservative state / vm and updates mesh's internal state.
 // ideally everything happens here should be atomic.
 // see https://github.com/spacemeshos/go-spacemesh/issues/3333
-func (msh *Mesh) applyState(logger log.Log, lid types.LayerID, valids []*types.Block) error {
+func (msh *Mesh) applyState(ctx context.Context, logger log.Log, lid types.LayerID, valids []*types.Block) error {
 	applied := types.EmptyBlockID
 	block := msh.getBlockToApply(valids)
 	if block != nil {
 		applied = block.ID()
-		failedTxs, err := msh.conState.ApplyLayer(block)
+		failedTxs, err := msh.conState.ApplyLayer(ctx, block)
 		if err != nil {
 			logger.With().Error("failed to apply transactions",
 				log.Int("num_failed_txs", len(failedTxs)),
@@ -565,6 +565,7 @@ func (msh *Mesh) applyState(logger log.Log, lid types.LayerID, valids []*types.B
 		)
 	}
 
+	logger.With().Info("db tx for applyState")
 	if err := msh.cdb.WithTx(context.Background(), func(dbtx *sql.Tx) error {
 		if err := layers.SetApplied(dbtx, lid, applied); err != nil {
 			return fmt.Errorf("set applied for %v/%v: %w", lid, applied, err)
@@ -694,7 +695,8 @@ func (msh *Mesh) addBallot(b *types.Ballot) error {
 	}
 
 	// it is important to run add ballot and set identity to malicious atomically
-	return msh.cdb.WithTx(context.Background(), func(tx *sql.Tx) error {
+	msh.logger.With().Info("db tx for addBallot")
+	err = msh.cdb.WithTx(context.Background(), func(tx *sql.Tx) error {
 		if err := ballots.Add(tx, b); err != nil && !errors.Is(err, sql.ErrObjectExists) {
 			return err
 		}
@@ -716,6 +718,8 @@ func (msh *Mesh) addBallot(b *types.Ballot) error {
 		}
 		return nil
 	})
+	msh.logger.With().Info("done db tx for addBallot")
+	return err
 }
 
 // AddBlockWithTXs adds the block and its TXs in into the database.

@@ -188,6 +188,7 @@ func nonceMarshaller(any interface{}) log.ArrayMarshaler {
 }
 
 func (ac *accountCache) addBatch(logger log.Log, nonce2TXs map[uint64][]*txtypes.NanoTX, blockSeed []byte) error {
+	logger.With().Debug("account has pending txs", log.Int("num_pending", len(nonce2TXs)))
 	var (
 		oldNonce  = ac.nextNonce()
 		nextNonce = oldNonce
@@ -196,7 +197,6 @@ func (ac *accountCache) addBatch(logger log.Log, nonce2TXs map[uint64][]*txtypes
 	for len(nonce2TXs) > 0 {
 		if _, ok := nonce2TXs[nextNonce]; !ok {
 			logger.With().Debug("batch does not contain the next nonce",
-				ac.addr,
 				log.Uint64("nonce", nextNonce),
 				log.Array("batch", nonceMarshaller(nonce2TXs)))
 			break
@@ -205,20 +205,17 @@ func (ac *accountCache) addBatch(logger log.Log, nonce2TXs map[uint64][]*txtypes
 		best := findBest(nonce2TXs[nextNonce], balance, blockSeed)
 		if best == nil {
 			logger.With().Warning("no feasible transactions at nonce",
-				ac.addr,
 				log.Uint64("nonce", nextNonce),
 				log.Uint64("balance", balance))
 			break
 		} else {
 			logger.With().Debug("found best in nonce txs",
-				ac.addr,
 				best.ID,
 				log.Uint64("nonce", nextNonce),
 				log.Uint64("fee", best.Fee()))
 		}
 		if err := ac.accept(logger, best, balance, blockSeed); err != nil {
 			logger.With().Warning("failed to add tx to account cache",
-				ac.addr,
 				best.ID,
 				log.Uint64("nonce", best.Nonce.Counter),
 				log.Uint64("amount", best.MaxSpend),
@@ -236,7 +233,6 @@ func (ac *accountCache) addBatch(logger log.Log, nonce2TXs map[uint64][]*txtypes
 		for nonce := range nonce2TXs {
 			if nonce >= nextNonce {
 				logger.With().Debug("transactions detected in higher nonce",
-					ac.addr,
 					log.Uint64("next_nonce", nextNonce),
 					log.Uint64("found_nonce", nonce))
 				ac.moreInDB = true
@@ -246,11 +242,10 @@ func (ac *accountCache) addBatch(logger log.Log, nonce2TXs map[uint64][]*txtypes
 	}
 	if nextNonce > oldNonce {
 		logger.With().Debug("added batch to account pool",
-			ac.addr,
 			log.Uint64("from_nonce", oldNonce),
 			log.Uint64("to_nonce", nextNonce-1))
 	} else {
-		logger.With().Debug("no feasible txs from batch", ac.addr, log.Array("batch", nonceMarshaller(nonce2TXs)))
+		logger.With().Debug("no feasible txs from batch", log.Array("batch", nonceMarshaller(nonce2TXs)))
 	}
 	return nil
 }
@@ -298,8 +293,7 @@ func (ac *accountCache) addToExistingNonce(logger log.Log, ntx *txtypes.NanoTX) 
 //   if it is better than the best candidate in that nonce group, swap
 func (ac *accountCache) add(logger log.Log, db *sql.Database, tx *types.Transaction, received time.Time, blockSeed []byte) error {
 	if tx.Nonce.Counter < ac.startNonce {
-		logger.With().Debug("nonce too small",
-			ac.addr,
+		logger.With().Warning("nonce too small",
 			tx.ID,
 			log.Uint64("next_nonce", ac.startNonce),
 			log.Uint64("tx_nonce", tx.Nonce.Counter))
@@ -309,9 +303,8 @@ func (ac *accountCache) add(logger log.Log, db *sql.Database, tx *types.Transact
 	next := ac.nextNonce()
 	if tx.Nonce.Counter > next {
 		logger.With().Debug("nonce too large. will be loaded later",
-			tx.Principal,
 			tx.ID,
-			log.Uint64("next_nonce", ac.startNonce),
+			log.Uint64("next_nonce", next),
 			log.Uint64("tx_nonce", tx.Nonce.Counter))
 		ac.moreInDB = true
 		return errNonceTooBig
@@ -340,6 +333,7 @@ func (ac *accountCache) add(logger log.Log, db *sql.Database, tx *types.Transact
 	// adding a new nonce can bridge the nonce gap in db
 	// check DB for txs with higher nonce
 	if ac.moreInDB {
+		logger.With().Debug("adding more from db", log.Uint64("from_nonce", ac.nextNonce()))
 		if err := ac.addPendingFromNonce(logger, db, ac.nextNonce(), types.LayerID{}); err != nil {
 			return err
 		}
@@ -412,6 +406,7 @@ func (ac *accountCache) getMempool(logger log.Log) []*txtypes.NanoTX {
 		}
 		bests = append(bests, nonceTXs.best)
 	}
+	logger.With().Info("account in mempool", log.Int("offset", offset), log.Int("size", len(ac.txsByNonce)), log.Uint64("from", bests[0].Nonce.Counter), log.Uint64("to", bests[len(bests)-1].Nonce.Counter))
 	return bests
 }
 
@@ -473,6 +468,7 @@ func (ac *accountCache) applyLayer(
 // NOTE: this is the only point in time when we reconsider those previously rejected txs,
 // because applying a layer changes the conservative balance in the cache.
 func (ac *accountCache) resetAfterApply(logger log.Log, db *sql.Database, nextNonce, newBalance uint64, applied types.LayerID) error {
+	logger.With().Info("resetting to nonce", ac.addr, log.Uint64("nonce", nextNonce))
 	ac.removeFromOffset(0)
 	ac.txsByNonce = make([]*sameNonceTXs, 0, maxTXsPerAcct)
 	ac.startNonce = nextNonce
@@ -608,17 +604,32 @@ func (c *cache) cleanupAccounts(accounts map[types.Address]struct{}) {
 	}
 }
 
-func (c *cache) Add(db *sql.Database, tx *types.Transaction, received time.Time, blockSeed []byte) error {
+// - errInsufficientBalance:
+//   conservative cache is conservative in that it only counts principal's spending for pending transactions.
+//   a tx rejected due to insufficient balance MAY become feasible after a layer is applied (principal
+//   received incoming funds). when we receive a errInsufficientBalance tx, we should store it in db and
+//   re-evaluate it after each layer is applied.
+// - errNonceTooBig: transactions are gossiped/synced out of nonce order. when we receive a errNonceTooBig tx,
+//   we should store it in db and retrieve it when the nonce gap is filled in the cache.
+// - errTooManyNonce: when a principal has way too many nonces, we don't want to blow up the memory. they should
+//   be stored in db and retrieved after each earlier nonce is applied.
+func acceptable(err error) bool {
+	return err == nil || errors.Is(err, errInsufficientBalance) || errors.Is(err, errNonceTooBig) || errors.Is(err, errTooManyNonce)
+}
+
+func (c *cache) Add(ctx context.Context, db *sql.Database, tx *types.Transaction, received time.Time, mustPersist bool, blockSeed []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	principal := tx.Principal
 	c.createAcctIfNotPresent(principal)
 	defer c.cleanupAccounts(map[types.Address]struct{}{principal: {}})
-	if err := c.pending[principal].add(c.logger, db, tx, received, blockSeed); err != nil {
-		return err
+	logger := c.logger.WithContext(ctx).WithFields(principal)
+	err := c.pending[principal].add(logger, db, tx, received, blockSeed)
+	if acceptable(err) || mustPersist {
+		return transactions.Add(db, tx, received)
 	}
-	return nil
+	return err
 }
 
 // Get gets a transaction from the cache.
@@ -675,7 +686,7 @@ func (c *cache) updateLayer(lid types.LayerID, bid types.BlockID, tids []types.T
 			// transaction is not considered best in its nonce group
 			return nil
 		}
-		c.cachedTXs[ID].UpdateLayerMaybe(lid, bid)
+		c.cachedTXs[ID].UpdateLayerMaybe(c.logger, lid, bid)
 	}
 	return nil
 }
@@ -753,6 +764,9 @@ func (c *cache) ApplyLayer(db *sql.Database, lid types.LayerID, bid types.BlockI
 		if _, ok := byPrincipal[principal]; ok {
 			continue
 		}
+		if _, ok := c.pending[principal]; !ok {
+			continue
+		}
 		nextNonce, balance := c.stateF(principal)
 		if err := c.pending[principal].resetAfterApply(logger, db, nextNonce, balance, lid); err != nil {
 			logger.With().Error("failed to reset cache for principal", principal, log.Err(err))
@@ -793,7 +807,7 @@ func (c *cache) GetMempool() map[types.Address][]*txtypes.NanoTX {
 
 	all := make(map[types.Address][]*txtypes.NanoTX)
 	for addr, accCache := range c.pending {
-		txs := accCache.getMempool(c.logger)
+		txs := accCache.getMempool(c.logger.WithFields(addr))
 		if len(txs) > 0 {
 			all[addr] = txs
 		}
