@@ -62,12 +62,33 @@ func (cp *ConsensusProcess) run() error {
 	// is reached.
 	for itter := itter(0); itter < cp.maxItter; itter++ {
 		// Status Round
+		// Broadcast statusRoundMessage if eligible
+		// Wait for end of statusRound to reduce messages to safeValueProof
+		// on the Union of all valid statusRoundMessages.
 		select {
-		case <-ctx.Done():
+		case <-cp.ctx.Done():
 			return nil
-		case <-c.AwaitEndOfRound(statusRound, itter):
+		case <-cp.roundClock.AwaitEndOfRound(statusRound, itter):
 			cp.eg.Go(func() error {
-				return cp.runRound(r)
+				return resolveStatusRound()
+			})
+		}
+		// Proposal Round
+		select {
+		case <-cp.ctx.Done():
+			return nil
+		case <-cp.roundClock.AwaitEndOfRound(statusRound, itter):
+			cp.eg.Go(func() error {
+				return resolveStatusRound()
+			})
+		}
+		// Status Round
+		select {
+		case <-cp.ctx.Done():
+			return nil
+		case <-cp.roundClock.AwaitEndOfRound(statusRound, itter):
+			cp.eg.Go(func() error {
+				return resolveStatusRound()
 			})
 		}
 	}
