@@ -9,32 +9,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type round int
-
-const (
-	preRound      = round(-1)
-	statusRound   = round(0)
-	proposalRound = round(1)
-	commitRound   = round(2)
-	notifyRound   = round(3)
-)
-
-func roundCountToRound(roundCount int) round {
-	if roundCount == 0 {
-		return preRound
-	}
-	return round(roundCount % 4)
-}
-
 type RoundClock interface {
-	AwaitEndOfRound(round uint32) <-chan struct{}
+	AwaitEndOfRound(round, itter) <-chan struct{}
 }
 
 type ConsensusProcess struct {
 	state
 	msgs       *messageCache
 	roundClock RoundClock
-	maxItter   int
+	maxItter   itter
 
 	once   sync.Once
 	ctx    context.Context
@@ -62,33 +45,30 @@ func (cp *ConsensusProcess) Stop() {
 
 func (cp *ConsensusProcess) run() error {
 	// Run preRound
-	go cp.runRound(preRound)
-	// Continue running rounds until the context is cancelled or max itterations
+	// Broadcast inputSet in preRound message if eligible
+	// TODO: Broadcast inputSet in preRound message if eligible
+	// Wait for end of preRound to reduce messages to preRoundCertificate
+	select {
+	case <-cp.ctx.Done():
+		return nil
+	case <-cp.roundClock.AwaitEndOfRound(preRound, 0):
+		cp.eg.Go(func() error {
+			return resolvePreRound(cp.state.inputSet, *cp.msgs)
+		})
+
+	}
+
+	// Continue running itterations until the context is cancelled or max itterations
 	// is reached.
-	for roundCount := 0; ; roundCount++ {
+	for itter := itter(0); itter < cp.maxItter; itter++ {
+		// Status Round
 		select {
-		case <-cp.ctx.Done():
+		case <-ctx.Done():
 			return nil
-		case <-cp.roundClock.AwaitEndOfRound(uint32(roundCount)):
-			r := roundCountToRound(roundCount)
+		case <-c.AwaitEndOfRound(statusRound, itter):
 			cp.eg.Go(func() error {
 				return cp.runRound(r)
 			})
 		}
-	}
-}
-
-func (cp *ConsensusProcess) runRound(roundCount round) error {
-	switch roundCount {
-	case preRound:
-		return cp.preRound()
-	case statusRound:
-		return cp.statusRound()
-	case proposalRound:
-		return cp.proposalRound()
-	case commitRound:
-		return cp.commitRound()
-	case notifyRound:
-		return cp.notifyRound()
 	}
 }

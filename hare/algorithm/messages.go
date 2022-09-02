@@ -1,5 +1,8 @@
 package algorithm
 
+import "github.com/spacemeshos/go-spacemesh/common/types"
+
+type messageID types.Hash20
 type message interface {
 	Bytes() []byte
 }
