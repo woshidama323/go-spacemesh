@@ -122,7 +122,7 @@ func TestStepTransactions(t *testing.T) {
 			nonce, err := client.nonce(tctx)
 			require.NoError(t, err)
 			if nonce == 0 {
-				tctx.Log.Debugw("spawning wallet", "address", client.account)
+				tctx.Log.Debugw("spawning wallet", "address", client.account, "node", client.node.Name)
 				ctx, cancel := context.WithTimeout(tctx, 5*time.Minute)
 				defer cancel()
 				req, err := client.submit(ctx, wallet.SelfSpawn(client.account.PrivateKey, types.Nonce{}))
@@ -139,7 +139,7 @@ func TestStepTransactions(t *testing.T) {
 					return err
 				}
 
-				tctx.Log.Debugw("spawned wallet", "address", client.account, "layer", rst.Layer)
+				tctx.Log.Debugw("spawned wallet", "address", client.account, "layer", rst.Layer, "node", client.node.Name)
 			}
 			tctx.Log.Debugw("submitting transactions",
 				"address", client.account,
@@ -159,8 +159,8 @@ func TestStepTransactions(t *testing.T) {
 				)
 				_, err := client.submit(tctx, raw)
 				if err != nil {
-					return fmt.Errorf("failed to submit 0x%x from %s with nonce %d: %w",
-						hash.Sum(raw), client.account, nonce, err,
+					return fmt.Errorf("failed to submit 0x%x from %s with nonce %d to node %v: %w",
+						hash.Sum(raw), client.account, nonce, client.node.Name, err,
 					)
 				}
 				nonce++
@@ -168,11 +168,12 @@ func TestStepTransactions(t *testing.T) {
 			tctx.Log.Debugw("submitted transactions",
 				"address", client.account,
 				"nonce", nonce,
+				"node", client.node.Name,
 			)
 			return nil
 		})
 	}
-	require.NoError(t, eg.Wait())
+	require.NoError(t, eg.Wait(), fmt.Sprintf("err: %s", err))
 }
 
 func TestStepReplaceNodes(t *testing.T) {
@@ -360,7 +361,10 @@ func TestScheduleBasic(t *testing.T) {
 	rn.concurrent(5*time.Minute, func() bool {
 		return t.Run("verify synced", TestStepVerifySynced)
 	})
-	rn.one(60*time.Minute, func() bool {
+	rn.one(25*time.Minute, func() bool {
+		return t.Run("short disconnect", TestStepShortDisconnect)
+	})
+	rn.one(40*time.Minute, func() bool {
 		return t.Run("replace nodes", TestStepReplaceNodes)
 	})
 	rn.wait()
