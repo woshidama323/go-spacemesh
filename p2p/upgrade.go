@@ -3,9 +3,11 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/libp2p/go-libp2p/core/host"
 
+	libpubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/p2p/addressbook"
@@ -94,10 +96,17 @@ func Upgrade(h host.Host, genesisID types.Hash20, opts ...Opt) (*Host, error) {
 	if err != nil {
 		return nil, fmt.Errorf("check node as bootnode: %w", err)
 	}
+
+	jt, err := libpubsub.NewJSONTracer(filepath.Join(cfg.DataDir, "pubsub.trace"))
+	if err != nil {
+		return nil, fmt.Errorf("Failed to construct json tracer: %w", err)
+	}
+
 	if fh.PubSub, err = pubsub.New(fh.ctx, fh.logger, h, pubsub.Config{
 		Flood:          cfg.Flood,
 		IsBootnode:     bootnode,
 		MaxMessageSize: cfg.MaxMessageSize,
+		Tracer:         jt,
 	}); err != nil {
 		return nil, fmt.Errorf("failed to initialize pubsub: %w", err)
 	}

@@ -86,11 +86,13 @@ type Config struct {
 	Flood          bool
 	IsBootnode     bool
 	MaxMessageSize int
+	Tracer         pubsub.EventTracer
 }
 
 // New creates PubSub instance.
 func New(ctx context.Context, logger log.Log, h host.Host, cfg Config) (*PubSub, error) {
 	// TODO(dshulyak) refactor code to accept options
+
 	opts := getOptions(cfg)
 	ps, err := pubsub.NewGossipSub(ctx, h, opts...)
 	if err != nil {
@@ -160,6 +162,7 @@ func msgID(msg *pb.Message) string {
 }
 
 func getOptions(cfg Config) []pubsub.Option {
+
 	options := []pubsub.Option{
 		// Gossipsubv1.1 configuration
 		pubsub.WithFloodPublish(cfg.Flood),
@@ -169,6 +172,7 @@ func getOptions(cfg Config) []pubsub.Option {
 		pubsub.WithPeerOutboundQueueSize(8192),
 		pubsub.WithValidateQueueSize(8192),
 		pubsub.WithRawTracer(p2pmetrics.NewGoSIPCollector()),
+		pubsub.WithEventTracer(cfg.Tracer),
 		pubsub.WithPeerScore(
 			&pubsub.PeerScoreParams{
 				AppSpecificScore: func(p peer.ID) float64 {
