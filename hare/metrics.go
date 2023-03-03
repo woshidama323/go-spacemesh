@@ -45,4 +45,12 @@ var (
 		[]string{},
 		prometheus.ExponentialBuckets(4, 2, 3),
 	).WithLabelValues()
+
+	preRoundDelaySeconds = metrics.NewHistogramWithBuckets(
+		"pre_round_delay_seconds",
+		namespace,
+		"delta between expected time of receipt of pre round message and actual receipt time",
+		[]string{},
+		prometheus.ExponentialBuckets(0.1, 2, 10),
+	).WithLabelValues()
 )
