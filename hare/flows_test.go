@@ -345,6 +345,12 @@ func (c *SharedRoundClock) advanceRound() {
 	}
 }
 
+// SimRoundClock is used in conjunction with SharedRoundClock to advance rounds
+// in the consensus processes only when all consensus processes have published
+// their message for each round. This creates a somewhat artificial environment
+// where all leader nodes need to participate in order to reach consesus. I.E
+// when using this clock the network cannot tolerate the failure of a single
+// leader.
 type SimRoundClock struct {
 	clocks map[types.LayerID]*SharedRoundClock
 	m      sync.Mutex
@@ -534,6 +540,9 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 		}
 	}
 	var pubsubs []*pubsub.PubSub
+	// Note that this clock will not progress rounds until all nodes have
+	// received messages from all other nodes. So a single failure will cause
+	// the network to halt.
 	scMap := NewSharedClock(totalNodes, totalCp, time.Duration(50*int(totalCp)*totalNodes)*time.Millisecond)
 	outputs := make([]map[types.LayerID]LayerOutput, totalNodes)
 	var outputsWaitGroup sync.WaitGroup
