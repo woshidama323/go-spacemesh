@@ -141,6 +141,10 @@ func Test_consensusIterations(t *testing.T) {
 	defer cancel()
 	mesh, err := mocknet.FullMeshLinked(totalNodes)
 	require.NoError(t, err)
+	defer func() {
+		err := mesh.Close()
+		require.NoError(t, err)
+	}()
 
 	test.initialSets = make([]*Set, totalNodes)
 	set1 := NewSetFromValues(types.ProposalID{1})
