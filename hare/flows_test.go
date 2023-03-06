@@ -48,10 +48,11 @@ func newHareWrapper(totalCp uint32) *HareWrapper {
 func (his *HareWrapper) waitForTermination() {
 	for {
 		count := 0
-		for _, p := range his.hare {
+		for hIndex, p := range his.hare {
 			for i := types.GetEffectiveGenesis().Add(1); !i.After(types.GetEffectiveGenesis().Add(his.totalCP)); i = i.Add(1) {
 				proposalIDs, _ := p.getResult(i)
 				if len(proposalIDs) > 0 {
+					println("got result, hare index:", hIndex, "layer index:", i.Value)
 					count++
 				}
 			}
@@ -408,11 +409,11 @@ func Test_multipleCPs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	mesh, err := mocknet.FullMeshLinked(totalNodes)
+	require.NoError(t, err)
 	defer func() {
 		err := mesh.Close()
 		require.NoError(t, err)
 	}()
-	require.NoError(t, err)
 
 	test.initialSets = make([]*Set, totalNodes)
 
@@ -510,11 +511,11 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	mesh, err := mocknet.FullMeshLinked(totalNodes)
+	require.NoError(t, err)
 	defer func() {
 		err := mesh.Close()
 		require.NoError(t, err)
 	}()
-	require.NoError(t, err)
 
 	test.initialSets = make([]*Set, totalNodes)
 
