@@ -11,6 +11,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/datastore"
@@ -177,6 +178,7 @@ func (mev *mockEligibilityValidator) ValidateEligibilityGossip(context.Context, 
 }
 
 func TestConsensusProcess_TerminationLimit(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	c := config.Config{N: 10, F: 5, RoundDuration: 200 * time.Millisecond, ExpectedLeaders: 5, LimitIterations: 1, LimitConcurrent: 1, Hdist: 20}
 	p := generateConsensusProcessWithConfig(t, c, make(chan any, 10))
 	p.Start()
@@ -187,6 +189,7 @@ func TestConsensusProcess_TerminationLimit(t *testing.T) {
 }
 
 func TestConsensusProcess_PassiveParticipant(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	c := config.Config{N: 10, F: 5, RoundDuration: 200 * time.Millisecond, ExpectedLeaders: 5, LimitIterations: 1, LimitConcurrent: 1, Hdist: 20}
 	p := generateConsensusProcessWithConfig(t, c, make(chan any, 10))
 	p.nonce = nil
@@ -197,6 +200,7 @@ func TestConsensusProcess_PassiveParticipant(t *testing.T) {
 }
 
 func TestConsensusProcess_eventLoop(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	net := &mockP2p{}
 	c := config.Config{N: 10, F: 5, RoundDuration: 2 * time.Second, ExpectedLeaders: 5, LimitIterations: 1000, LimitConcurrent: 1000, Hdist: 20}
 	proc := generateConsensusProcessWithConfig(t, c, make(chan any, 10))
@@ -223,6 +227,7 @@ func TestConsensusProcess_eventLoop(t *testing.T) {
 
 // test that proc.Stop() actually returns and cause the consensus process to be GC'ed.
 func TestConsensusProcess_StartAndStop(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	c := config.Config{N: 10, F: 5, RoundDuration: 50 * time.Millisecond, ExpectedLeaders: 5, LimitIterations: 1, LimitConcurrent: 1000, Hdist: 20}
 	proc := generateConsensusProcessWithConfig(t, c, make(chan any, 10))
 	proc.publisher = &mockP2p{}
@@ -242,11 +247,13 @@ func TestConsensusProcess_StartAndStop(t *testing.T) {
 }
 
 func TestConsensusProcess_handleMessage(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctrl := gomock.NewController(t)
 
 	r := require.New(t)
 	net := &mockP2p{}
 	broker := buildBroker(t, t.Name())
+	defer broker.Close()
 	broker.Start(context.Background())
 	proc := generateConsensusProcess(t)
 	proc.publisher = net
@@ -285,7 +292,9 @@ func TestConsensusProcess_handleMessage(t *testing.T) {
 }
 
 func TestConsensusProcess_nextRound(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	broker := buildBroker(t, t.Name())
+	defer broker.Close()
 	broker.Start(context.Background())
 	proc := generateConsensusProcess(t)
 	proc.advanceToNextRound(context.Background())
@@ -341,12 +350,14 @@ func generateConsensusProcessWithConfig(tb testing.TB, cfg config.Config, inbox 
 }
 
 func TestConsensusProcess_Id(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	proc := generateConsensusProcess(t)
 	proc.layer = instanceID1
 	require.Equal(t, instanceID1, proc.ID())
 }
 
 func TestNewConsensusProcess_AdvanceToNextRound(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	proc := generateConsensusProcess(t)
 	k := proc.getRound()
 	proc.advanceToNextRound(context.Background())
@@ -354,6 +365,7 @@ func TestNewConsensusProcess_AdvanceToNextRound(t *testing.T) {
 }
 
 func TestConsensusProcess_InitDefaultBuilder(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	proc := generateConsensusProcess(t)
 	s := NewEmptySet(defaultSetSize)
 	s.Add(types.ProposalID{1})
@@ -368,6 +380,7 @@ func TestConsensusProcess_InitDefaultBuilder(t *testing.T) {
 }
 
 func TestConsensusProcess_isEligible_NotEligible(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctrl := gomock.NewController(t)
 
 	proc := generateConsensusProcess(t)
@@ -381,6 +394,7 @@ func TestConsensusProcess_isEligible_NotEligible(t *testing.T) {
 }
 
 func TestConsensusProcess_isEligible_Eligible(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctrl := gomock.NewController(t)
 
 	proc := generateConsensusProcess(t)
@@ -394,6 +408,7 @@ func TestConsensusProcess_isEligible_Eligible(t *testing.T) {
 }
 
 func TestConsensusProcess_isEligible_ActiveSetFailed(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctrl := gomock.NewController(t)
 
 	proc := generateConsensusProcess(t)
@@ -405,6 +420,7 @@ func TestConsensusProcess_isEligible_ActiveSetFailed(t *testing.T) {
 }
 
 func TestConsensusProcess_isEligible_NotActive(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctrl := gomock.NewController(t)
 
 	proc := generateConsensusProcess(t)
@@ -416,6 +432,7 @@ func TestConsensusProcess_isEligible_NotActive(t *testing.T) {
 }
 
 func TestConsensusProcess_sendMessage(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 	net := &mockP2p{}
 
@@ -440,6 +457,7 @@ func TestConsensusProcess_sendMessage(t *testing.T) {
 }
 
 func TestConsensusProcess_procPre(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	proc := generateConsensusProcess(t)
 	s := NewDefaultEmptySet()
 	signer, err := signing.NewEdSigner()
@@ -452,6 +470,7 @@ func TestConsensusProcess_procPre(t *testing.T) {
 }
 
 func TestConsensusProcess_procStatus(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	proc := generateConsensusProcess(t)
 	proc.beginStatusRound(context.Background())
 	s := NewDefaultEmptySet()
@@ -463,6 +482,7 @@ func TestConsensusProcess_procStatus(t *testing.T) {
 }
 
 func TestConsensusProcess_procProposal(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	proc := generateConsensusProcess(t)
 	proc.validator.(*syntaxContextValidator).threshold = 1
 	proc.validator.(*syntaxContextValidator).statusValidator = func(m *Msg) bool {
@@ -485,6 +505,7 @@ func TestConsensusProcess_procProposal(t *testing.T) {
 }
 
 func TestConsensusProcess_procCommit(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	proc := generateConsensusProcess(t)
 	proc.advanceToNextRound(context.Background())
 	s := NewDefaultEmptySet()
@@ -499,6 +520,7 @@ func TestConsensusProcess_procCommit(t *testing.T) {
 }
 
 func TestConsensusProcess_procNotify(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	proc := generateConsensusProcess(t)
 	proc.notifyTracker = newNotifyTracker(logtest.New(t), 7, make(chan *types.MalfeasanceGossip), proc.eTracker, proc.cfg.N)
 	proc.advanceToNextRound(context.Background())
@@ -520,6 +542,7 @@ func TestConsensusProcess_procNotify(t *testing.T) {
 }
 
 func TestConsensusProcess_Termination(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	proc := generateConsensusProcess(t)
 	proc.notifyTracker = newNotifyTracker(logtest.New(t), notifyRound, make(chan *types.MalfeasanceGossip), proc.eTracker, proc.cfg.N)
 	proc.advanceToNextRound(context.Background())
@@ -537,6 +560,7 @@ func TestConsensusProcess_Termination(t *testing.T) {
 }
 
 func TestConsensusProcess_currentRound(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	proc := generateConsensusProcess(t)
 	proc.advanceToNextRound(context.Background())
 	require.Equal(t, statusRound, proc.currentRound())
@@ -549,6 +573,7 @@ func TestConsensusProcess_currentRound(t *testing.T) {
 }
 
 func TestConsensusProcess_onEarlyMessage(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 	proc := generateConsensusProcess(t)
 	signer1, err := signing.NewEdSigner()
@@ -578,23 +603,27 @@ func TestConsensusProcess_onEarlyMessage(t *testing.T) {
 }
 
 func TestProcOutput_Id(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	po := procReport{instanceID1, nil, false, false}
 	require.Equal(t, po.ID(), instanceID1)
 }
 
 func TestProcOutput_Set(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	es := NewDefaultEmptySet()
 	po := procReport{instanceID1, es, false, false}
 	require.True(t, es.Equals(po.Set()))
 }
 
 func TestIterationFromCounter(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	for i := uint32(0); i < 10; i++ {
 		require.Equal(t, i/4, inferIteration(i))
 	}
 }
 
 func TestConsensusProcess_beginStatusRound(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctrl := gomock.NewController(t)
 
 	proc := generateConsensusProcess(t)
@@ -622,6 +651,7 @@ func TestConsensusProcess_beginStatusRound(t *testing.T) {
 }
 
 func TestConsensusProcess_beginProposalRound(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctrl := gomock.NewController(t)
 
 	proc := generateConsensusProcess(t)
@@ -653,6 +683,7 @@ func TestConsensusProcess_beginProposalRound(t *testing.T) {
 }
 
 func TestConsensusProcess_beginCommitRound(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctrl := gomock.NewController(t)
 
 	proc := generateConsensusProcess(t)
@@ -693,6 +724,7 @@ func (m *mockNet) Publish(ctx context.Context, protocol string, payload []byte) 
 }
 
 func TestConsensusProcess_handlePending(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	proc := generateConsensusProcess(t)
 	const count = 5
 	pending := make(map[string]*Msg)
@@ -707,6 +739,7 @@ func TestConsensusProcess_handlePending(t *testing.T) {
 }
 
 func TestConsensusProcess_beginRound4(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 
 	proc := generateConsensusProcess(t)

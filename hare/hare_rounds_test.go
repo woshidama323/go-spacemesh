@@ -41,6 +41,7 @@ func (w *TestHareWrapper) LayerTicker(interval time.Duration) {
 	last := j.Add(w.totalCP)
 
 	for ; j.Before(last); j = j.Add(1) {
+		println("advancing layer")
 		w.clock.advanceLayer()
 		select {
 		case <-w.termination:
@@ -106,6 +107,7 @@ func runNodesFor(t *testing.T, ctx context.Context, nodes, leaders, maxLayers, l
 		th.mockRoracle.EXPECT().Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 		go func() {
 			for out := range th.blockGenCh {
+				println("validate")
 				validate(out.Layer, th)
 			}
 		}()
@@ -157,6 +159,7 @@ func Test_HarePreRoundEmptySet(t *testing.T) {
 			}
 		}
 	}
+	need to close all the hare instances created by runNodesFor and also close the mesh that it creates
 }
 
 func Test_HareNotEnoughStatuses(t *testing.T) {

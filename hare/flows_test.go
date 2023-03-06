@@ -11,6 +11,7 @@ import (
 	"github.com/golang/mock/gomock"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/datastore"
@@ -34,6 +35,12 @@ type HareWrapper struct {
 	initialSets []*Set // all initial sets
 	outputs     map[types.LayerID][]*Set
 }
+
+// func (hw *HareWrapper) Close() error {
+// 	for _, h := range hw.hare {
+// 		h.Close()
+// 	}
+// }
 
 func newHareWrapper(totalCp uint32) *HareWrapper {
 	hs := new(HareWrapper)
@@ -132,6 +139,7 @@ func (m *p2pManipulator) Publish(ctx context.Context, protocol string, payload [
 
 // Test - runs a single CP for more than one iteration.
 func Test_consensusIterations(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	test := newConsensusTest()
 
 	totalNodes := 15
@@ -160,6 +168,7 @@ func Test_consensusIterations(t *testing.T) {
 		sig, err := signing.NewEdSigner()
 		require.NoError(t, err)
 		tcp := createConsensusProcess(t, ctx, sig, true, cfg, oracle, p2pm, test.initialSets[i], instanceID1)
+		defer tcp.cp.terminate()
 		test.procs = append(test.procs, tcp.cp)
 		test.brokers = append(test.brokers, tcp.broker)
 		i++
@@ -167,6 +176,7 @@ func Test_consensusIterations(t *testing.T) {
 	test.Create(totalNodes, creationFunc)
 	require.NoError(t, mesh.ConnectAllButSelf())
 	test.Start()
+	// This function closes brokers
 	test.WaitForTimedTermination(t, 40*time.Second)
 }
 
@@ -402,7 +412,7 @@ func NewSimRoundClock(s pubsub.PublishSubsciber, clocks map[types.LayerID]*Share
 
 // Test - run multiple CPs simultaneously.
 func Test_multipleCPs(t *testing.T) {
-	// defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	logtest.SetupGlobal(t)
 
 	r := require.New(t)
@@ -426,7 +436,6 @@ func Test_multipleCPs(t *testing.T) {
 	dbs := make([]*sql.Database, 0, totalNodes)
 	for i := 0; i < totalNodes; i++ {
 		db := sql.InMemory()
-		defer db.Close()
 		dbs = append(dbs, db)
 	}
 	pList := make(map[types.LayerID][]types.ProposalID)
@@ -491,7 +500,7 @@ func Test_multipleCPs(t *testing.T) {
 
 	test.WaitForTimedTermination(t, 80*time.Second)
 	for _, h := range test.hare {
-		close(h.blockGenCh)
+		h.Close()
 	}
 	outputsWaitGroup.Wait()
 	for _, out := range outputs {
@@ -504,7 +513,7 @@ func Test_multipleCPs(t *testing.T) {
 
 // Test - run multiple CPs where one of them runs more than one iteration.
 func Test_multipleCPsAndIterations(t *testing.T) {
-	// defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	logtest.SetupGlobal(t)
 
 	r := require.New(t)
@@ -528,7 +537,6 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 	dbs := make([]*sql.Database, 0, totalNodes)
 	for i := 0; i < totalNodes; i++ {
 		db := sql.InMemory()
-		defer db.Close()
 		dbs = append(dbs, db)
 	}
 	pList := make(map[types.LayerID][]types.ProposalID)
@@ -597,7 +605,7 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 
 	test.WaitForTimedTermination(t, 100*time.Second)
 	for _, h := range test.hare {
-		close(h.blockGenCh)
+		h.Close()
 	}
 	outputsWaitGroup.Wait()
 	for _, out := range outputs {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/spacemeshos/go-spacemesh/codec"
 	"github.com/spacemeshos/go-spacemesh/common/types"
@@ -127,6 +128,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestHare_New(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctrl := gomock.NewController(t)
 
 	signer, err := signing.NewEdSigner()
@@ -153,17 +155,25 @@ func TestHare_New(t *testing.T) {
 		logger,
 		withNonceFetcher(mocks.NewMocknonceFetcher(ctrl)),
 	)
+	// We need to get a context to the broker otherwise we get a panic on close.
+	h.Start(context.Background())
+	defer h.Close()
 	require.NotNil(t, h)
 }
 
 func TestHare_Start(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	h := createTestHare(t, sql.InMemory(), config.DefaultConfig(), newMockClock(), noopPubSub(t), t.Name())
 	require.NoError(t, h.Start(context.Background()))
 	h.Close()
 }
 
 func TestHare_collectOutputAndGetResult(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	h := createTestHare(t, sql.InMemory(), config.DefaultConfig(), newMockClock(), noopPubSub(t), t.Name())
+	// We need to get a context to the broker otherwise we get a panic on close.
+	require.NoError(t, h.Start(context.Background()))
+	defer h.Close()
 
 	lyrID := types.NewLayerID(10)
 	res, err := h.getResult(lyrID)
@@ -187,7 +197,11 @@ func TestHare_collectOutputAndGetResult(t *testing.T) {
 }
 
 func TestHare_collectOutputGetResult_TerminateTooLate(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	h := createTestHare(t, sql.InMemory(), config.DefaultConfig(), newMockClock(), noopPubSub(t), t.Name())
+	// We need to get a context to the broker otherwise we get a panic on close.
+	require.NoError(t, h.Start(context.Background()))
+	defer h.Close()
 
 	lyrID := types.NewLayerID(10)
 	res, err := h.getResult(lyrID)
@@ -210,8 +224,11 @@ func TestHare_collectOutputGetResult_TerminateTooLate(t *testing.T) {
 }
 
 func TestHare_OutputCollectionLoop(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	h := createTestHare(t, sql.InMemory(), config.DefaultConfig(), newMockClock(), noopPubSub(t), t.Name())
+	// We need to get a context to the broker otherwise we get a panic on close.
 	require.NoError(t, h.Start(context.Background()))
+	defer h.Close()
 
 	lyrID := types.NewLayerID(8)
 	mo := mockReport{lyrID, NewEmptySet(0), true, false}
@@ -232,6 +249,7 @@ func TestHare_OutputCollectionLoop(t *testing.T) {
 }
 
 func TestHare_malfeasanceLoop(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	mpubsub := pubsubmocks.NewMockPublishSubsciber(gomock.NewController(t))
 	mpubsub.EXPECT().Register(pubsub.HareProtocol, gomock.Any())
 	h := createTestHare(t, sql.InMemory(), config.DefaultConfig(), newMockClock(), mpubsub, t.Name())
@@ -303,6 +321,7 @@ func TestHare_malfeasanceLoop(t *testing.T) {
 }
 
 func TestHare_onTick(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	cfg := config.DefaultConfig()
 	cfg.N = 2
 	cfg.F = 1
@@ -359,8 +378,8 @@ func TestHare_onTick(t *testing.T) {
 	// consensus process is closed, should not process any tick
 	wg.Add(1)
 	go func() {
-		clock.advanceLayer()
 		h.Close()
+		clock.advanceLayer()
 		wg.Done()
 	}()
 
@@ -373,6 +392,7 @@ func TestHare_onTick(t *testing.T) {
 }
 
 func TestHare_onTick_BeaconFromRefBallot(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	cfg := config.DefaultConfig()
 	cfg.N = 2
 	cfg.F = 1
@@ -433,6 +453,7 @@ func TestHare_onTick_BeaconFromRefBallot(t *testing.T) {
 }
 
 func TestHare_onTick_SomeBadBallots(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	cfg := config.DefaultConfig()
 	cfg.N = 2
 	cfg.F = 1
@@ -490,6 +511,7 @@ func TestHare_onTick_SomeBadBallots(t *testing.T) {
 }
 
 func TestHare_onTick_NoGoodBallots(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	cfg := config.DefaultConfig()
 	cfg.N = 2
 	cfg.F = 1
@@ -546,6 +568,7 @@ func TestHare_onTick_NoGoodBallots(t *testing.T) {
 }
 
 func TestHare_onTick_NoBeacon(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	lyr := types.NewLayerID(199)
 
 	h := createTestHare(t, sql.InMemory(), config.DefaultConfig(), newMockClock(), noopPubSub(t), t.Name())
@@ -562,6 +585,7 @@ func TestHare_onTick_NoBeacon(t *testing.T) {
 }
 
 func TestHare_onTick_NotSynced(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	lyr := types.NewLayerID(199)
 
 	h := createTestHare(t, sql.InMemory(), config.DefaultConfig(), newMockClock(), noopPubSub(t), t.Name())
@@ -584,7 +608,11 @@ func TestHare_onTick_NotSynced(t *testing.T) {
 }
 
 func TestHare_outputBuffer(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	h := createTestHare(t, sql.InMemory(), config.DefaultConfig(), newMockClock(), noopPubSub(t), t.Name())
+	// We need to get a context to the broker otherwise we get a panic on close.
+	require.NoError(t, h.Start(context.Background()))
+	defer h.Close()
 	var lyr types.LayerID
 	for i := uint32(1); i <= h.config.Hdist; i++ {
 		lyr = types.GetEffectiveGenesis().Add(i)
@@ -611,7 +639,11 @@ func TestHare_outputBuffer(t *testing.T) {
 }
 
 func TestHare_IsTooLate(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	h := createTestHare(t, sql.InMemory(), config.DefaultConfig(), newMockClock(), noopPubSub(t), t.Name())
+	// We need to get a context to the broker otherwise we get a panic on close.
+	require.NoError(t, h.Start(context.Background()))
+	defer h.Close()
 	var lyr types.LayerID
 	for i := uint32(1); i <= h.config.Hdist*2; i++ {
 		lyr = types.GetEffectiveGenesis().Add(i)
@@ -634,7 +666,11 @@ func TestHare_IsTooLate(t *testing.T) {
 }
 
 func TestHare_oldestInBuffer(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	h := createTestHare(t, sql.InMemory(), config.DefaultConfig(), newMockClock(), noopPubSub(t), t.Name())
+	// We need to get a context to the broker otherwise we get a panic on close.
+	require.NoError(t, h.Start(context.Background()))
+	defer h.Close()
 	var lyr types.LayerID
 	for i := uint32(1); i <= h.config.Hdist; i++ {
 		lyr = types.GetEffectiveGenesis().Add(i)
@@ -669,6 +705,7 @@ func TestHare_oldestInBuffer(t *testing.T) {
 // make sure that Hare writes a weak coin value for a layer to the mesh after the CP completes,
 // regardless of whether it succeeds or fails.
 func TestHare_WeakCoin(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	h := createTestHare(t, sql.InMemory(), config.DefaultConfig(), newMockClock(), noopPubSub(t), t.Name())
 	layerID := types.NewLayerID(10)
 	h.setLastLayer(layerID)

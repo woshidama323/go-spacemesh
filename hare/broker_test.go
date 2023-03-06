@@ -13,6 +13,7 @@ import (
 	"github.com/spacemeshos/go-scale"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/spacemeshos/go-spacemesh/codec"
 	"github.com/spacemeshos/go-spacemesh/common/types"
@@ -55,10 +56,11 @@ func createMessage(tb testing.TB, instanceID types.LayerID) []byte {
 
 // test that a InnerMsg to a specific set ID is delivered by the broker.
 func TestBroker_Received(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	broker := buildBroker(t, t.Name())
+	defer broker.Close()
 	broker.mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	broker.Start(context.Background())
-	t.Cleanup(broker.Close)
 
 	lid := types.NewLayerID(1)
 	inbox, err := broker.Register(context.Background(), lid)
@@ -72,10 +74,11 @@ func TestBroker_Received(t *testing.T) {
 // test that after registering the maximum number of protocols,
 // the earliest one gets unregistered in favor of the newest one.
 func TestBroker_MaxConcurrentProcesses(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	broker := buildBrokerWithLimit(t, t.Name(), 4)
+	defer broker.Close()
 	broker.mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	broker.Start(context.Background())
-	t.Cleanup(broker.Close)
 
 	broker.Register(context.Background(), instanceID1)
 	broker.Register(context.Background(), instanceID2)
@@ -114,6 +117,7 @@ func TestBroker_MaxConcurrentProcesses(t *testing.T) {
 
 // test that aborting the broker aborts.
 func TestBroker_Abort(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	broker := buildBroker(t, t.Name())
 	broker.Start(context.Background())
 
@@ -160,12 +164,13 @@ func waitForMessages(t *testing.T, inbox chan any, instanceID types.LayerID, msg
 
 // test flow for multiple set ObjectID.
 func TestBroker_MultipleInstanceIds(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	const msgCount = 1
 
 	broker := buildBroker(t, t.Name())
+	defer broker.Close()
 	broker.mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	broker.Start(context.Background())
-	t.Cleanup(broker.Close)
 
 	inbox1, err := broker.Register(context.Background(), instanceID1)
 	require.NoError(t, err)
@@ -203,9 +208,10 @@ func TestBroker_MultipleInstanceIds(t *testing.T) {
 }
 
 func TestBroker_RegisterUnregister(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	broker := buildBroker(t, t.Name())
+	defer broker.Close()
 	broker.Start(context.Background())
-	t.Cleanup(broker.Close)
 
 	broker.Register(context.Background(), instanceID1)
 
@@ -224,13 +230,14 @@ func newMockGossipMsg(msg Message) *Msg {
 }
 
 func TestBroker_Send(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctx := context.Background()
 	broker := buildBroker(t, t.Name())
+	defer broker.Close()
 	mev := &mockEligibilityValidator{valid: 0}
 	broker.roleValidator = mev
 	broker.mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	broker.Start(ctx)
-	t.Cleanup(broker.Close)
 
 	require.Equal(t, pubsub.ValidationIgnore, broker.HandleMessage(ctx, "", nil))
 
@@ -249,15 +256,16 @@ func TestBroker_Send(t *testing.T) {
 }
 
 func TestBroker_HandleMaliciousHareMessage(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctx := context.Background()
 	broker := buildBroker(t, t.Name())
+	defer broker.Close()
 	mch := make(chan *types.MalfeasanceGossip, 1)
 	broker.mchOut = mch
 	mev := &mockEligibilityValidator{valid: 1}
 	broker.roleValidator = mev
 	broker.mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	broker.Start(ctx)
-	t.Cleanup(broker.Close)
 
 	inbox, err := broker.Register(context.Background(), instanceID1)
 	require.NoError(t, err)
@@ -304,12 +312,13 @@ func TestBroker_HandleMaliciousHareMessage(t *testing.T) {
 }
 
 func TestBroker_HandleEligibility(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctx := context.Background()
 	broker := buildBroker(t, t.Name())
+	defer broker.Close()
 	mev := &mockEligibilityValidator{valid: 0}
 	broker.roleValidator = mev
 	broker.Start(ctx)
-	t.Cleanup(broker.Close)
 
 	signer, err := signing.NewEdSigner()
 	require.NoError(t, err)
@@ -373,12 +382,13 @@ func TestBroker_HandleEligibility(t *testing.T) {
 }
 
 func TestBroker_Register(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	broker := buildBroker(t, t.Name())
+	defer broker.Close()
 	broker.mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	broker.Start(ctx)
-	t.Cleanup(broker.Close)
 
 	signer, err := signing.NewEdSigner()
 	require.NoError(t, err)
@@ -406,10 +416,11 @@ func TestBroker_Register(t *testing.T) {
 }
 
 func TestBroker_Register2(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	broker := buildBroker(t, t.Name())
+	defer broker.Close()
 	broker.mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	broker.Start(context.Background())
-	t.Cleanup(broker.Close)
 	broker.Register(context.Background(), instanceID1)
 
 	signer, err := signing.NewEdSigner()
@@ -426,10 +437,11 @@ func TestBroker_Register2(t *testing.T) {
 }
 
 func TestBroker_Register3(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	broker := buildBroker(t, t.Name())
+	defer broker.Close()
 	broker.mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	broker.Start(context.Background())
-	t.Cleanup(broker.Close)
 
 	signer, err := signing.NewEdSigner()
 	require.NoError(t, err)
@@ -452,10 +464,11 @@ func TestBroker_Register3(t *testing.T) {
 }
 
 func TestBroker_PubkeyExtraction(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	broker := buildBroker(t, t.Name())
+	defer broker.Close()
 	broker.mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	broker.Start(context.Background())
-	t.Cleanup(broker.Close)
 	inbox, _ := broker.Register(context.Background(), instanceID1)
 
 	signer, err := signing.NewEdSigner()
@@ -482,6 +495,7 @@ func TestBroker_PubkeyExtraction(t *testing.T) {
 }
 
 func Test_newMsg(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	signer, err := signing.NewEdSigner()
 	require.NoError(t, err)
 	m := BuildPreRoundMsg(signer, NewSetFromValues(types.ProposalID{1}), nil).Message
@@ -497,11 +511,12 @@ func Test_newMsg(t *testing.T) {
 }
 
 func TestBroker_eventLoop(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 	b := buildBroker(t, t.Name())
+	defer b.Close()
 	b.mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	b.Start(context.Background())
-	t.Cleanup(b.Close)
 
 	signer, err := signing.NewEdSigner()
 	require.NoError(t, err)
@@ -537,8 +552,10 @@ func TestBroker_eventLoop(t *testing.T) {
 }
 
 func Test_validate(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 	b := buildBroker(t, t.Name())
+	defer b.Close()
 
 	b.mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 
@@ -586,12 +603,13 @@ func Test_validate(t *testing.T) {
 }
 
 func TestBroker_Flow(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 	b := buildBroker(t, t.Name())
+	defer b.Close()
 
 	b.mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 	b.Start(context.Background())
-	t.Cleanup(b.Close)
 
 	signer1, err := signing.NewEdSigner()
 	require.NoError(t, err)
@@ -633,9 +651,10 @@ func TestBroker_Flow(t *testing.T) {
 // Shows that the limit is not enforced when we start registering at some layer greater than genesis.
 // And that we can get up to the starting layer numbers instances.
 func TestBroker_Limit1(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	broker := buildBrokerWithLimit(t, t.Name(), 1)
+	defer broker.Close()
 	broker.Start(context.Background())
-	t.Cleanup(broker.Close)
 
 	var i uint32
 	for i = 1; i < 25; i++ {
@@ -664,9 +683,10 @@ func TestBroker_Limit1(t *testing.T) {
 // limits. This is because on unregister the minDeleted is not updated beyond
 // exisiting layers, meaning it starts to 'lag'.
 func TestBroker_Limit2(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	broker := buildBrokerWithLimit(t, t.Name(), 10)
+	defer broker.Close()
 	broker.Start(context.Background())
-	t.Cleanup(broker.Close)
 
 	var i uint32
 	for i = 1; i <= 10; i++ {

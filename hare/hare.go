@@ -518,9 +518,11 @@ func (h *Hare) outputCollectionLoop(ctx context.Context) {
 // listens to new layers.
 func (h *Hare) tickLoop(ctx context.Context) {
 	for layer := h.layerClock.CurrentLayer(); ; layer = layer.Add(1) {
+		println("waiting for layer", layer.Uint32())
 		ctx := log.WithNewSessionID(ctx)
 		select {
 		case <-h.layerClock.AwaitLayer(layer):
+			println("gol layer", layer.Uint32())
 			if time.Since(h.layerClock.LayerToTime(layer)) > h.config.WakeupDelta {
 				h.WithContext(ctx).With().Warning("missed hare window, skipping layer", layer)
 				continue
@@ -612,6 +614,8 @@ func (h *Hare) Start(ctx context.Context) error {
 
 // Close sends a termination signal to hare goroutines and waits for their termination.
 func (h *Hare) Close() {
+	// close(h.blockGenCh)
+	// h.broker.Close()
 	h.cancel()
 	_ = h.eg.Wait()
 }

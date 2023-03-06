@@ -12,6 +12,7 @@ import (
 	"github.com/golang/mock/gomock"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/spacemeshos/go-spacemesh/codec"
 	"github.com/spacemeshos/go-spacemesh/common/types"
@@ -214,6 +215,7 @@ func createConsensusProcess(
 }
 
 func TestConsensusFixedOracle(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	test := newConsensusTest()
 	cfg := config.Config{N: 16, F: 8, RoundDuration: 2 * time.Second, ExpectedLeaders: 5, LimitIterations: 1000, Hdist: 20}
 
@@ -222,6 +224,10 @@ func TestConsensusFixedOracle(t *testing.T) {
 	defer cancel()
 	mesh, err := mocknet.FullMeshLinked(totalNodes)
 	require.NoError(t, err)
+	defer func() {
+		err := mesh.Close()
+		require.NoError(t, err)
+	}()
 
 	test.initialSets = make([]*Set, totalNodes)
 	set1 := NewSetFromValues(types.ProposalID{1})
@@ -246,6 +252,7 @@ func TestConsensusFixedOracle(t *testing.T) {
 }
 
 func TestSingleValueForHonestSet(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	test := newConsensusTest()
 
 	// Larger values may trigger race detector failures because of 8128 goroutines limit.
@@ -256,6 +263,10 @@ func TestSingleValueForHonestSet(t *testing.T) {
 	defer cancel()
 	mesh, err := mocknet.FullMeshLinked(totalNodes)
 	require.NoError(t, err)
+	defer func() {
+		err := mesh.Close()
+		require.NoError(t, err)
+	}()
 
 	test.initialSets = make([]*Set, totalNodes)
 	set1 := NewSetFromValues(types.ProposalID{1})
@@ -280,6 +291,7 @@ func TestSingleValueForHonestSet(t *testing.T) {
 }
 
 func TestAllDifferentSet(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	test := newConsensusTest()
 
 	cfg := config.Config{N: 10, F: 5, RoundDuration: 2 * time.Second, ExpectedLeaders: 5, LimitIterations: 1000, Hdist: 20}
@@ -288,6 +300,10 @@ func TestAllDifferentSet(t *testing.T) {
 	defer cancel()
 	mesh, err := mocknet.FullMeshLinked(totalNodes)
 	require.NoError(t, err)
+	defer func() {
+		err := mesh.Close()
+		require.NoError(t, err)
+	}()
 
 	test.initialSets = make([]*Set, totalNodes)
 
@@ -322,6 +338,7 @@ func TestAllDifferentSet(t *testing.T) {
 }
 
 func TestSndDelayedDishonest(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	if testing.Short() {
 		t.Skip()
 	}
@@ -335,6 +352,10 @@ func TestSndDelayedDishonest(t *testing.T) {
 	defer cancel()
 	mesh, err := mocknet.FullMeshLinked(totalNodes)
 	require.NoError(t, err)
+	defer func() {
+		err := mesh.Close()
+		require.NoError(t, err)
+	}()
 
 	test.initialSets = make([]*Set, totalNodes)
 	honest1 := NewSetFromValues(types.ProposalID{1}, types.ProposalID{2}, types.ProposalID{4}, types.ProposalID{5})
@@ -380,6 +401,7 @@ func TestSndDelayedDishonest(t *testing.T) {
 }
 
 func TestRecvDelayedDishonest(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	if testing.Short() {
 		t.Skip()
 	}
@@ -393,6 +415,10 @@ func TestRecvDelayedDishonest(t *testing.T) {
 	defer cancel()
 	mesh, err := mocknet.FullMeshLinked(totalNodes)
 	require.NoError(t, err)
+	defer func() {
+		err := mesh.Close()
+		require.NoError(t, err)
+	}()
 
 	test.initialSets = make([]*Set, totalNodes)
 	honest1 := NewSetFromValues(types.ProposalID{1}, types.ProposalID{2}, types.ProposalID{4}, types.ProposalID{5})
@@ -475,6 +501,7 @@ func (ps *delayedPubSub) Register(protocol string, handler pubsub.GossipHandler)
 }
 
 func TestEquivocation(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	if testing.Short() {
 		t.Skip()
 	}
@@ -488,6 +515,10 @@ func TestEquivocation(t *testing.T) {
 	defer cancel()
 	mesh, err := mocknet.FullMeshLinked(totalNodes)
 	require.NoError(t, err)
+	defer func() {
+		err := mesh.Close()
+		require.NoError(t, err)
+	}()
 
 	test.initialSets = make([]*Set, totalNodes)
 	set1 := NewSetFromValues(types.ProposalID{1}, types.ProposalID{2})

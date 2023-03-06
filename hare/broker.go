@@ -324,4 +324,5 @@ func (b *Broker) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.cancel()
+	// b.cdb.Close()
 }
