@@ -457,7 +457,7 @@ func (proc *consensusProcess) handleMessage(ctx context.Context, m *Msg) {
 		proc.layer)
 
 	// Note: instanceID is already verified by the broker
-	logger.Debug("consensus process received message")
+	logger.Error("consensus process received message")
 	// broker already validated the eligibility of this message
 	proc.eTracker.Track(m.PubKey.Bytes(), m.Round, m.Eligibility.Count, true)
 

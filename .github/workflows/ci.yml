@@ -188,7 +188,7 @@ jobs:
         env:
           GOTESTSUM_FORMAT: standard-verbose
           GOTESTSUM_JUNITFILE: unit-tests.xml
-        run: eval $(make print-test-env) gotestsum -- -race -timeout 5m $(${{ matrix.package-selection }})
+        run: eval TEST_LOG_LEVEL=error $(make print-test-env) gotestsum -- -race -timeout 5m $(${{ matrix.package-selection }})
         continue-on-error: ${{ matrix.allow-failure == 'true' }}
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v3
@@ -255,7 +255,7 @@ jobs:
         env:
           GOTESTSUM_FORMAT: standard-verbose
           GOTESTSUM_JUNITFILE: unit-tests.xml
-        run: eval $(make print-test-env) gotestsum -- -race -timeout 5m $(${{ matrix.package-selection }})
+        run: eval TEST_LOG_LEVEL=error $(make print-test-env) gotestsum -- -race -timeout 5m $(${{ matrix.package-selection }})
         continue-on-error: ${{ matrix.allow-failure == 'true' }}
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v3
