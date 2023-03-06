@@ -49,13 +49,15 @@ func (his *HareWrapper) waitForTermination() {
 	for {
 		count := 0
 		for hIndex, p := range his.hare {
+			var results []int
 			for i := types.GetEffectiveGenesis().Add(1); !i.After(types.GetEffectiveGenesis().Add(his.totalCP)); i = i.Add(1) {
 				proposalIDs, _ := p.getResult(i)
 				if len(proposalIDs) > 0 {
-					println("got result, hare index:", hIndex, "layer index:", i.Value)
+					results = append(results, int(i.Value))
 					count++
 				}
 			}
+			p.Error("got results, hareIndex: %v results: %+v", hIndex, results)
 		}
 
 		if count == int(his.totalCP)*len(his.hare) {
