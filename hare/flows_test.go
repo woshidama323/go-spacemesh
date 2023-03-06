@@ -458,7 +458,7 @@ func Test_multipleCPs(t *testing.T) {
 		}(i)
 		h.newRoundClock = src.NewRoundClock
 		test.hare = append(test.hare, h.Hare)
-		e := h.Start(context.TODO())
+		e := h.Start(ctx)
 		r.NoError(e)
 	}
 	require.NoError(t, mesh.ConnectAllButSelf())
@@ -561,7 +561,7 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 		}(i)
 		h.newRoundClock = src.NewRoundClock
 		test.hare = append(test.hare, h.Hare)
-		e := h.Start(context.TODO())
+		e := h.Start(ctx)
 		r.NoError(e)
 	}
 	require.NoError(t, mesh.ConnectAllButSelf())
