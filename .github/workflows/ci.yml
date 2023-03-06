@@ -153,7 +153,7 @@ jobs:
           - os: ubuntu-latest
             allow-failure: "false"
           - packages: hare
-            package-selection: "./hare"
+            package-selection: "go list ./hare"
           - packages: remainder
             package-selection: "go list ./...  | grep -v github.com/spacemeshos/go-spacemesh/systest/tests | grep -v github.com/spacemeshos/go-spacemesh/hare"
     steps:
@@ -188,7 +188,7 @@ jobs:
         env:
           GOTESTSUM_FORMAT: standard-verbose
           GOTESTSUM_JUNITFILE: unit-tests.xml
-        run: eval $(make print-test-env) gotestsum -- -race -timeout 5m $(${{ matrix.package-selection }})
+        run: $(make print-test-env) gotestsum -- -race -timeout 5m $(${{ matrix.package-selection }})
         continue-on-error: ${{ matrix.allow-failure == 'true' }}
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v3
