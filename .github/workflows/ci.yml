@@ -180,7 +180,7 @@ jobs:
             ${{ runner.os }}-cache-go-${{ env.go-version }}-unittests-
             ${{ runner.os }}-cache-go-${{ env.go-version }}-
       - name: setup env
-        run: make install
+        run: make install && make get-libs
       - name: Clear test cache
         run: make clear-test-cache
       - name: unit tests
