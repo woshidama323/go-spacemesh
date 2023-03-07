@@ -34,6 +34,10 @@ const (
 	epochOffset       uint32 = 3
 )
 
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+}
+
 type testOracle struct {
 	*Oracle
 	mBeacon       *mocks.MockBeaconGetter
