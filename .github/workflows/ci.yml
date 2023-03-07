@@ -154,9 +154,9 @@ jobs:
           - os: ubuntu-latest
             allow-failure: "false"
           - packages: part1
-            package-selection: "go list ./hare/... ./activation/..."
+            package-selection: "go list ./hare/..."
           - packages: part2
-            package-selection: "go list ./...  | grep -v github.com/spacemeshos/go-spacemesh/systest/tests | grep -v github.com/spacemeshos/go-spacemesh/hare | grep -v github.com/spacemeshos/go-spacemesh/activation"
+            package-selection: "go list ./...  | grep -v github.com/spacemeshos/go-spacemesh/systest/tests | grep -v github.com/spacemeshos/go-spacemesh/hare"
           - packages: part3
             package-selection: "echo ./hare -run 'Test_multipleCPs'"
     steps:
@@ -221,9 +221,9 @@ jobs:
           - os: windows-latest
             allow-failure: "true"
           - packages: part1
-            package-selection: "go list ./hare/... ./activation/..."
+            package-selection: "go list ./hare/..."
           - packages: part2
-            package-selection: "go list ./...  | grep -v github.com/spacemeshos/go-spacemesh/systest/tests | grep -v github.com/spacemeshos/go-spacemesh/hare | grep -v github.com/spacemeshos/go-spacemesh/activation"
+            package-selection: "go list ./...  | grep -v github.com/spacemeshos/go-spacemesh/systest/tests | grep -v github.com/spacemeshos/go-spacemesh/hare"
     steps:
       - name: disable TCP/UDP offload
         if: ${{ matrix.os == 'macos-latest' }}
