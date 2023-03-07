@@ -10,6 +10,7 @@ import (
 	"github.com/golang/mock/gomock"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/hare/config"
@@ -61,7 +62,7 @@ type (
 	}
 )
 
-func runNodesFor(t *testing.T, ctx context.Context, nodes, leaders, maxLayers, limitIterations int, createProposal bool, oracle funcOracle, validate funcValidate) *TestHareWrapper {
+func runNodesFor(t *testing.T, ctx context.Context, nodes, leaders, maxLayers, limitIterations int, createProposal bool, oracle funcOracle, validate funcValidate) (hareWrapper *TestHareWrapper, cleanup func()) {
 	r := require.New(t)
 	w := newTestHareWrapper(maxLayers)
 	cfg := config.Config{
@@ -117,10 +118,17 @@ func runNodesFor(t *testing.T, ctx context.Context, nodes, leaders, maxLayers, l
 	}
 	require.NoError(t, mesh.ConnectAllButSelf())
 
-	return w
+	return w, func() {
+		err := mesh.Close()
+		require.NoError(t, err)
+		for _, h := range w.hare {
+			h.Close()
+		}
+	}
 }
 
 func Test_HarePreRoundEmptySet(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	const nodes = 5
 	const layers = 2
 
@@ -129,7 +137,7 @@ func Test_HarePreRoundEmptySet(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	w := runNodesFor(t, ctx, nodes, 2, layers, 2, false,
+	w, cleanup := runNodesFor(t, ctx, nodes, 2, layers, 2, false,
 		func(layer types.LayerID, round uint32, committee int, id types.NodeID, blocks []byte, hare *testHare) (uint16, error) {
 			if round/4 > 1 && round != preRound {
 				t.Fatalf("out of round %d limit", round)
@@ -143,7 +151,7 @@ func Test_HarePreRoundEmptySet(t *testing.T) {
 			m[l][hare.N] = 1
 			mu.Unlock()
 		})
-
+	defer cleanup()
 	w.LayerTicker(100 * time.Millisecond)
 	time.Sleep(time.Second * 6)
 
@@ -159,10 +167,10 @@ func Test_HarePreRoundEmptySet(t *testing.T) {
 			}
 		}
 	}
-	need to close all the hare instances created by runNodesFor and also close the mesh that it creates
 }
 
 func Test_HareNotEnoughStatuses(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	if skipMoreTests {
 		t.SkipNow()
 	}
@@ -174,7 +182,7 @@ func Test_HareNotEnoughStatuses(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	w := runNodesFor(t, ctx, nodes, 2, layers, 1, false,
+	w, cleanup := runNodesFor(t, ctx, nodes, 2, layers, 1, false,
 		func(layer types.LayerID, round uint32, committee int, id types.NodeID, blocks []byte, hare *testHare) (uint16, error) {
 			if round%4 == statusRound && hare.N >= committee/2-1 {
 				return 0, nil
@@ -185,6 +193,7 @@ func Test_HareNotEnoughStatuses(t *testing.T) {
 			l := layer.Difference(types.GetEffectiveGenesis()) - 1
 			m[l][hare.N] = 1
 		})
+	defer cleanup()
 
 	w.LayerTicker(1 * time.Second)
 	time.Sleep(time.Second * 6)
@@ -199,6 +208,7 @@ func Test_HareNotEnoughStatuses(t *testing.T) {
 }
 
 func Test_HareNotEnoughLeaders(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	if skipMoreTests {
 		t.SkipNow()
 	}
@@ -208,7 +218,7 @@ func Test_HareNotEnoughLeaders(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	w := runNodesFor(t, ctx, nodes, 2, layers, 1, false,
+	w, cleanup := runNodesFor(t, ctx, nodes, 2, layers, 1, false,
 		func(layer types.LayerID, round uint32, committee int, id types.NodeID, blocks []byte, hare *testHare) (uint16, error) {
 			if round%4 == proposalRound {
 				return 0, nil
@@ -219,6 +229,7 @@ func Test_HareNotEnoughLeaders(t *testing.T) {
 			l := layer.Difference(types.GetEffectiveGenesis()) - 1
 			m[l][hare.N] = 1
 		})
+	defer cleanup()
 
 	w.LayerTicker(1 * time.Second)
 	time.Sleep(time.Second * 6)
@@ -233,6 +244,7 @@ func Test_HareNotEnoughLeaders(t *testing.T) {
 }
 
 func Test_HareNotEnoughCommits(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	if skipMoreTests {
 		t.SkipNow()
 	}
@@ -243,7 +255,7 @@ func Test_HareNotEnoughCommits(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	w := runNodesFor(t, ctx, nodes, 2, layers, 1, true,
+	w, cleanup := runNodesFor(t, ctx, nodes, 2, layers, 1, true,
 		func(layer types.LayerID, round uint32, committee int, id types.NodeID, blocks []byte, hare *testHare) (uint16, error) {
 			if round%4 == commitRound && hare.N >= committee/2-1 {
 				return 0, nil
@@ -254,6 +266,7 @@ func Test_HareNotEnoughCommits(t *testing.T) {
 			l := layer.Difference(types.GetEffectiveGenesis()) - 1
 			m[l][hare.N] = 1
 		})
+	defer cleanup()
 
 	w.LayerTicker(100 * time.Millisecond)
 	time.Sleep(time.Second * 6)
@@ -268,6 +281,7 @@ func Test_HareNotEnoughCommits(t *testing.T) {
 }
 
 func Test_HareNotEnoughNotifications(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	if skipMoreTests {
 		t.SkipNow()
 	}
@@ -278,7 +292,7 @@ func Test_HareNotEnoughNotifications(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	w := runNodesFor(t, ctx, nodes, 2, layers, 1, true,
+	w, cleanup := runNodesFor(t, ctx, nodes, 2, layers, 1, true,
 		func(layer types.LayerID, round uint32, committee int, id types.NodeID, blocks []byte, hare *testHare) (uint16, error) {
 			if round%4 == notifyRound && hare.N >= committee/2-1 {
 				return 0, nil
@@ -289,6 +303,7 @@ func Test_HareNotEnoughNotifications(t *testing.T) {
 			l := layer.Difference(types.GetEffectiveGenesis()) - 1
 			m[l][hare.N] = 1
 		})
+	defer cleanup()
 
 	w.LayerTicker(100 * time.Millisecond)
 	time.Sleep(time.Second * 6)
@@ -303,6 +318,7 @@ func Test_HareNotEnoughNotifications(t *testing.T) {
 }
 
 func Test_HareComplete(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	if skipMoreTests {
 		t.SkipNow()
 	}
@@ -313,7 +329,7 @@ func Test_HareComplete(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	w := runNodesFor(t, ctx, nodes, 2, layers, 1, true,
+	w, cleanup := runNodesFor(t, ctx, nodes, 2, layers, 1, true,
 		func(layer types.LayerID, round uint32, committee int, id types.NodeID, blocks []byte, hare *testHare) (uint16, error) {
 			return 1, nil
 		},
@@ -321,6 +337,7 @@ func Test_HareComplete(t *testing.T) {
 			l := layer.Difference(types.GetEffectiveGenesis()) - 1
 			m[l][hare.N] = 1
 		})
+	defer cleanup()
 
 	w.LayerTicker(100 * time.Millisecond)
 	time.Sleep(time.Second * 6)
