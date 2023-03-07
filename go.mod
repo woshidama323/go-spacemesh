@@ -2,6 +2,7 @@ module github.com/spacemeshos/go-spacemesh
 
 go 1.19
 
+replace github.com/spacemeshos/poet => /home/pierspowlesland/projects/poet
 require (
 	crawshaw.io/sqlite v0.3.3-0.20211227050848-2cdb5c1a86a1
 	github.com/ALTree/bigfloat v0.0.0-20220102081255-38c8b72a9924

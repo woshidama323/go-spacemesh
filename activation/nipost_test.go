@@ -14,6 +14,7 @@ import (
 	"github.com/spacemeshos/post/initialization"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/spacemeshos/go-spacemesh/codec"
@@ -119,7 +120,8 @@ func defaultLayerClockMock(tb testing.TB) *MocklayerClock {
 }
 
 func TestNIPostBuilderWithMocks(t *testing.T) {
-	t.Parallel()
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	// t.Parallel()
 
 	challenge := types.PoetChallenge{NIPostChallenge: &types.NIPostChallenge{
 		PubLayerID: (postGenesisEpoch + 2).FirstLayer(),
@@ -140,16 +142,23 @@ func TestNIPostBuilderWithMocks(t *testing.T) {
 	require.NoError(t, err)
 	nb := NewNIPostBuilder(types.NodeID{1}, postProvider, []PoetProvingServiceClient{poetProvider},
 		poetDb, sql.InMemory(), logtest.New(t), sig, PoetConfig{}, mclock)
+	defer func() {
+		require.NoError(t, nb.db.Close())
+	}()
 	nipost, _, err := nb.BuildNIPost(context.Background(), &challenge)
 	require.NoError(t, err)
 	require.NotNil(t, nipost)
 }
 
 func TestPostSetup(t *testing.T) {
-	t.Parallel()
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	// t.Parallel()
 	r := require.New(t)
 
 	cdb := datastore.NewCachedDB(sql.InMemory(), logtest.New(t))
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	nodeID := types.NodeID{1}
 	goldenATXID := types.ATXID{2, 3, 4}
 	postSetupProvider, err := NewPostSetupManager(nodeID, DefaultPostConfig(), logtest.New(t), cdb, goldenATXID)
@@ -174,6 +183,9 @@ func TestPostSetup(t *testing.T) {
 	r.NoError(err)
 	nb := NewNIPostBuilder(nodeID, postSetupProvider, []PoetProvingServiceClient{poetProvider},
 		poetDb, sql.InMemory(), logtest.New(t), sig, PoetConfig{}, mclock)
+	defer func() {
+		require.NoError(t, nb.db.Close())
+	}()
 
 	r.NoError(postSetupProvider.StartSession(context.Background(), getPostSetupOpts(t), goldenATXID))
 	t.Cleanup(func() { assert.NoError(t, postSetupProvider.Reset()) })
@@ -184,7 +196,10 @@ func TestPostSetup(t *testing.T) {
 }
 
 func TestNIPostBuilderWithClients(t *testing.T) {
-	t.Parallel()
+	// t.Cleanup(func() {
+	// 	goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	// })
+	// t.Parallel()
 	logtest.SetupGlobal(t)
 	r := require.New(t)
 
@@ -225,7 +240,9 @@ func spawnPoet(tb testing.TB, opts ...HTTPPoetOpt) *HTTPPoetClient {
 	ctx, cancel := context.WithCancel(context.Background())
 	tb.Cleanup(func() {
 		cancel()
-		assert.NoError(tb, eg.Wait())
+		require.NoError(tb, eg.Wait())
+		// leveldb.DB.mpoolDrain waits a second in a goroutine before finishing, so we wait 2 to make sure its finished.
+		time.Sleep(time.Second * 2)
 	})
 	eg.Go(func() error {
 		return poetProver.Service.Start(ctx)
@@ -237,6 +254,9 @@ func spawnPoet(tb testing.TB, opts ...HTTPPoetOpt) *HTTPPoetClient {
 
 func buildNIPost(tb testing.TB, r *require.Assertions, postCfg PostConfig, nipostChallenge types.PoetChallenge, poetDb poetDbAPI) *types.NIPost {
 	cdb := datastore.NewCachedDB(sql.InMemory(), logtest.New(tb))
+	defer func() {
+		require.NoError(tb, cdb.Close())
+	}()
 	nodeID := types.NodeID{1}
 	goldenATXID := types.ATXID{2, 3, 4}
 	postProvider, err := NewPostSetupManager(nodeID, postCfg, logtest.New(tb), cdb, goldenATXID)
@@ -258,6 +278,9 @@ func buildNIPost(tb testing.TB, r *require.Assertions, postCfg PostConfig, nipos
 	r.NoError(err)
 	nb := NewNIPostBuilder(nodeID, postProvider, []PoetProvingServiceClient{poetProver},
 		poetDb, sql.InMemory(), logtest.New(tb), signer, poetCfg, mclock)
+	defer func() {
+		require.NoError(tb, nb.db.Close())
+	}()
 
 	nipost, _, err := nb.BuildNIPost(context.Background(), &nipostChallenge)
 	r.NoError(err)
@@ -287,10 +310,11 @@ func (*gatewayService) VerifyChallenge(_ context.Context, req *pb.VerifyChalleng
 }
 
 func TestNewNIPostBuilderNotInitialized(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	if testing.Short() {
 		t.Skip()
 	}
-	t.Parallel()
+	// t.Parallel()
 
 	r := require.New(t)
 
@@ -301,6 +325,9 @@ func TestNewNIPostBuilderNotInitialized(t *testing.T) {
 	challengeHash := nipostChallenge.Hash()
 
 	cdb := datastore.NewCachedDB(sql.InMemory(), logtest.New(t))
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	postCfg := DefaultPostConfig()
 	goldenATXID := types.ATXID{2, 3, 4}
 	postProvider, err := NewPostSetupManager(minerIDNotInitialized, postCfg, logtest.New(t), cdb, goldenATXID)
@@ -320,6 +347,9 @@ func TestNewNIPostBuilderNotInitialized(t *testing.T) {
 
 	nb := NewNIPostBuilder(minerIDNotInitialized, postProvider, []PoetProvingServiceClient{poetProver},
 		poetDb, sql.InMemory(), logtest.New(t), signer, PoetConfig{}, mclock)
+	defer func() {
+		require.NoError(t, nb.db.Close())
+	}()
 
 	nipost, _, err := nb.BuildNIPost(context.Background(), &nipostChallenge)
 	r.EqualError(err, "post setup not complete")
@@ -335,7 +365,8 @@ func TestNewNIPostBuilderNotInitialized(t *testing.T) {
 }
 
 func TestNIPostBuilder_BuildNIPost(t *testing.T) {
-	t.Parallel()
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	// t.Parallel()
 	req := require.New(t)
 
 	postProvider := &postSetupProviderMock{}
@@ -365,11 +396,17 @@ func TestNIPostBuilder_BuildNIPost(t *testing.T) {
 	nodeID := types.NodeID{1}
 	nb := NewNIPostBuilder(nodeID, postProvider, []PoetProvingServiceClient{poetProver},
 		poetDb, sql.InMemory(), logtest.New(t), sig, PoetConfig{}, mclock)
+	defer func(db *sql.Database) {
+		require.NoError(t, db.Close())
+	}(nb.db)
 
 	nipost, _, err := nb.BuildNIPost(context.Background(), &challenge)
 	req.NoError(err)
 	req.NotNil(nipost)
 	db := sql.InMemory()
+	defer func() {
+		require.NoError(t, db.Close())
+	}()
 	req.Equal(types.NIPostBuilderState{NIPost: &types.NIPost{}}, *nb.state)
 
 	poetDb = NewMockpoetDbAPI(ctrl)
@@ -407,7 +444,8 @@ func TestNIPostBuilder_BuildNIPost(t *testing.T) {
 }
 
 func TestNIPostBuilder_ManyPoETs_SubmittingChallenge_DeadlineReached(t *testing.T) {
-	t.Parallel()
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	// t.Parallel()
 	// Arrange
 	req := require.New(t)
 	challenge := types.PoetChallenge{NIPostChallenge: &types.NIPostChallenge{
@@ -453,7 +491,9 @@ func TestNIPostBuilder_ManyPoETs_SubmittingChallenge_DeadlineReached(t *testing.
 		PhaseShift: layerDuration * layersPerEpoch / 2,
 	}
 	nb := NewNIPostBuilder(types.NodeID{1}, &postSetupProviderMock{}, poets, poetDb, sql.InMemory(), logtest.New(t), sig, poetCfg, mclock)
-
+	defer func() {
+		require.NoError(t, nb.db.Close())
+	}()
 	// Act
 	nipost, _, err := nb.BuildNIPost(context.Background(), &challenge)
 	req.NoError(err)
@@ -465,7 +505,8 @@ func TestNIPostBuilder_ManyPoETs_SubmittingChallenge_DeadlineReached(t *testing.
 }
 
 func TestNIPostBuilder_ManyPoETs_WaitingForProof_DeadlineReached(t *testing.T) {
-	t.Parallel()
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	// t.Parallel()
 	// Arrange
 	req := require.New(t)
 	challenge := types.PoetChallenge{NIPostChallenge: &types.NIPostChallenge{
@@ -501,7 +542,9 @@ func TestNIPostBuilder_ManyPoETs_WaitingForProof_DeadlineReached(t *testing.T) {
 		GracePeriod: layerDuration * layersPerEpoch / 2,
 	}
 	nb := NewNIPostBuilder(types.NodeID{1}, &postSetupProviderMock{}, poets, poetDb, sql.InMemory(), logtest.New(t), sig, poetCfg, mclock)
-
+	defer func() {
+		require.NoError(t, nb.db.Close())
+	}()
 	// Act
 	nipost, _, err := nb.BuildNIPost(context.Background(), &challenge)
 	req.NoError(err)
@@ -513,7 +556,8 @@ func TestNIPostBuilder_ManyPoETs_WaitingForProof_DeadlineReached(t *testing.T) {
 }
 
 func TestNIPostBuilder_ManyPoETs_AllFinished(t *testing.T) {
-	t.Parallel()
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	// t.Parallel()
 	// Arrange
 	req := require.New(t)
 
@@ -549,6 +593,9 @@ func TestNIPostBuilder_ManyPoETs_AllFinished(t *testing.T) {
 	req.NoError(err)
 	nb := NewNIPostBuilder(types.NodeID{1}, &postSetupProviderMock{}, poets, poetDb, sql.InMemory(), logtest.New(t), sig, PoetConfig{}, mclock)
 
+	defer func() {
+		require.NoError(t, nb.db.Close())
+	}()
 	// Act
 	nipost, _, err := nb.BuildNIPost(context.Background(), &challenge)
 	req.NoError(err)
@@ -560,7 +607,8 @@ func TestNIPostBuilder_ManyPoETs_AllFinished(t *testing.T) {
 }
 
 func TestNIPostBuilder_Close(t *testing.T) {
-	t.Parallel()
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	// t.Parallel()
 	r := require.New(t)
 
 	postProvider := &postSetupProviderMock{}
@@ -576,6 +624,9 @@ func TestNIPostBuilder_Close(t *testing.T) {
 	r.NoError(err)
 	nb := NewNIPostBuilder(types.NodeID{1}, postProvider, []PoetProvingServiceClient{poetProver},
 		poetDb, sql.InMemory(), logtest.New(t), sig, PoetConfig{}, mclock)
+	defer func() {
+		require.NoError(t, nb.db.Close())
+	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -585,7 +636,8 @@ func TestNIPostBuilder_Close(t *testing.T) {
 }
 
 func TestNIPSTBuilder_PoetUnstable(t *testing.T) {
-	t.Parallel()
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	// t.Parallel()
 	postProver := &postSetupProviderMock{}
 	challenge := types.PoetChallenge{NIPostChallenge: &types.NIPostChallenge{
 		PubLayerID: (postGenesisEpoch + 1).FirstLayer(),
@@ -597,7 +649,7 @@ func TestNIPSTBuilder_PoetUnstable(t *testing.T) {
 	nodeID := types.NodeID{1}
 
 	t.Run("PoetServiceID fails", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		poetDb := NewMockpoetDbAPI(gomock.NewController(t))
 		mclock := defaultLayerClockMock(t)
 		poetProver := NewMockPoetProvingServiceClient(gomock.NewController(t))
@@ -605,12 +657,15 @@ func TestNIPSTBuilder_PoetUnstable(t *testing.T) {
 
 		nb := NewNIPostBuilder(nodeID, postProver, []PoetProvingServiceClient{poetProver},
 			poetDb, sql.InMemory(), logtest.New(t), sig, poetCfg, mclock)
+		defer func() {
+			require.NoError(t, nb.db.Close())
+		}()
 		nipst, _, err := nb.BuildNIPost(context.Background(), &challenge)
 		require.ErrorIs(t, err, ErrPoetServiceUnstable)
 		require.Nil(t, nipst)
 	})
 	t.Run("Submit fails", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		poetDb := NewMockpoetDbAPI(gomock.NewController(t))
 		mclock := defaultLayerClockMock(t)
 		poetProver := NewMockPoetProvingServiceClient(gomock.NewController(t))
@@ -619,12 +674,15 @@ func TestNIPSTBuilder_PoetUnstable(t *testing.T) {
 
 		nb := NewNIPostBuilder(nodeID, postProver, []PoetProvingServiceClient{poetProver},
 			poetDb, sql.InMemory(), logtest.New(t), sig, poetCfg, mclock)
+		defer func() {
+			require.NoError(t, nb.db.Close())
+		}()
 		nipst, _, err := nb.BuildNIPost(context.Background(), &challenge)
 		require.ErrorIs(t, err, ErrPoetServiceUnstable)
 		require.Nil(t, nipst)
 	})
 	t.Run("Submit hangs", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		poetDb := NewMockpoetDbAPI(gomock.NewController(t))
 		mclock := defaultLayerClockMock(t)
 		poetProver := NewMockPoetProvingServiceClient(gomock.NewController(t))
@@ -636,12 +694,15 @@ func TestNIPSTBuilder_PoetUnstable(t *testing.T) {
 
 		nb := NewNIPostBuilder(nodeID, postProver, []PoetProvingServiceClient{poetProver},
 			poetDb, sql.InMemory(), logtest.New(t), sig, poetCfg, mclock)
+		defer func() {
+			require.NoError(t, nb.db.Close())
+		}()
 		nipst, _, err := nb.BuildNIPost(context.Background(), &challenge)
 		require.ErrorIs(t, err, ErrPoetServiceUnstable)
 		require.Nil(t, nipst)
 	})
 	t.Run("Submit returns invalid hash", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		poetDb := NewMockpoetDbAPI(gomock.NewController(t))
 		mclock := defaultLayerClockMock(t)
 		poetProver := NewMockPoetProvingServiceClient(gomock.NewController(t))
@@ -650,12 +711,15 @@ func TestNIPSTBuilder_PoetUnstable(t *testing.T) {
 
 		nb := NewNIPostBuilder(nodeID, postProver, []PoetProvingServiceClient{poetProver},
 			poetDb, sql.InMemory(), logtest.New(t), sig, poetCfg, mclock)
+		defer func() {
+			require.NoError(t, nb.db.Close())
+		}()
 		nipst, _, err := nb.BuildNIPost(context.Background(), &challenge)
 		require.ErrorIs(t, err, ErrPoetServiceUnstable)
 		require.Nil(t, nipst)
 	})
 	t.Run("GetProof fails", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		poetDb := NewMockpoetDbAPI(gomock.NewController(t))
 		mclock := defaultLayerClockMock(t)
 		poetProver := defaultPoetServiceMock(t, []byte("poet"))
@@ -663,12 +727,15 @@ func TestNIPSTBuilder_PoetUnstable(t *testing.T) {
 
 		nb := NewNIPostBuilder(nodeID, postProver, []PoetProvingServiceClient{poetProver},
 			poetDb, sql.InMemory(), logtest.New(t), sig, poetCfg, mclock)
+		defer func() {
+			require.NoError(t, nb.db.Close())
+		}()
 		nipst, _, err := nb.BuildNIPost(context.Background(), &challenge)
 		require.ErrorIs(t, err, ErrPoetProofNotReceived)
 		require.Nil(t, nipst)
 	})
 	t.Run("Challenge is not included in proof members", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		poetDb := NewMockpoetDbAPI(gomock.NewController(t))
 		poetDb.EXPECT().ValidateAndStore(gomock.Any(), gomock.Any()).Return(nil)
 		mclock := defaultLayerClockMock(t)
@@ -677,6 +744,9 @@ func TestNIPSTBuilder_PoetUnstable(t *testing.T) {
 
 		nb := NewNIPostBuilder(nodeID, postProver, []PoetProvingServiceClient{poetProver},
 			poetDb, sql.InMemory(), logtest.New(t), sig, poetCfg, mclock)
+		defer func() {
+			require.NoError(t, nb.db.Close())
+		}()
 		nipst, _, err := nb.BuildNIPost(context.Background(), &challenge)
 		require.ErrorIs(t, err, ErrPoetProofNotReceived)
 		require.Nil(t, nipst)

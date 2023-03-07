@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/spacemeshos/go-spacemesh/codec"
@@ -36,6 +37,7 @@ const (
 
 func TestMain(m *testing.M) {
 	types.SetLayersPerEpoch(layersPerEpoch)
+	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	res := m.Run()
 	os.Exit(res)
 }
@@ -99,7 +101,7 @@ type testAtxBuilder struct {
 	msync   *Mocksyncer
 }
 
-func newTestBuilder(tb testing.TB, opts ...BuilderOption) *testAtxBuilder {
+func newTestBuilder(tb testing.TB, opts ...BuilderOption) (builder *testAtxBuilder, cleanup func()) {
 	lg := logtest.New(tb)
 	edSigner, err := signing.NewEdSigner()
 	require.NoError(tb, err)
@@ -139,7 +141,10 @@ func newTestBuilder(tb testing.TB, opts ...BuilderOption) *testAtxBuilder {
 	b.initialPostMeta = &types.PostMetadata{}
 	b.commitmentAtx = &tab.goldenATXID
 	tab.Builder = b
-	return tab
+	return tab, func() {
+		err := tab.cdb.Close()
+		require.NoError(tb, err)
+	}
 }
 
 func assertLastAtx(r *require.Assertions, nodeID types.NodeID, poetRef types.Hash32, newAtx *types.ActivationTx, posAtx, prevAtx *types.VerifiedActivationTx, layersPerEpoch uint32) {
@@ -246,15 +251,18 @@ func addAtx(t *testing.T, db sql.Executor, sig signer, atx *types.ActivationTx) 
 // ========== Tests ==========
 
 func TestBuilder_waitForFirstATX(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	t.Run("genesis", func(t *testing.T) {
-		tab := newTestBuilder(t)
+		tab, cleanup := newTestBuilder(t)
+		defer cleanup()
 		tab.mclock.EXPECT().CurrentLayer().Return(types.NewLayerID(0))
 		require.False(t, tab.waitForFirstATX(context.Background()))
 	})
 
 	// previous ATX not for current epoch -> need to wait
 	t.Run("new miner", func(t *testing.T) {
-		tab := newTestBuilder(t)
+		tab, cleanup := newTestBuilder(t)
+		defer cleanup()
 		current := types.NewLayerID(layersPerEpoch * 2) // first layer of epoch 2
 		addPrevAtx(t, tab.cdb, current.GetEpoch()-1, tab.sig, &tab.nodeID)
 		tab.mclock.EXPECT().CurrentLayer().Return(current).AnyTimes()
@@ -268,7 +276,8 @@ func TestBuilder_waitForFirstATX(t *testing.T) {
 			CycleGap:    2 * time.Millisecond,
 			GracePeriod: time.Millisecond,
 		}
-		tab := newTestBuilder(t, WithPoetConfig(poetCfg))
+		tab, cleanup := newTestBuilder(t, WithPoetConfig(poetCfg))
+		defer cleanup()
 		current := types.NewLayerID(layersPerEpoch * 2) // first layer of epoch 2
 		next := current.Add(layersPerEpoch)
 		addPrevAtx(t, tab.cdb, current.GetEpoch()-1, tab.sig, &tab.nodeID)
@@ -281,7 +290,8 @@ func TestBuilder_waitForFirstATX(t *testing.T) {
 
 	// previous ATX for current epoch -> no wait
 	t.Run("existing miner", func(t *testing.T) {
-		tab := newTestBuilder(t)
+		tab, cleanup := newTestBuilder(t)
+		defer cleanup()
 		current := types.NewLayerID(layersPerEpoch * 2) // first layer of epoch 2
 		tab.mclock.EXPECT().CurrentLayer().Return(current)
 		addPrevAtx(t, tab.cdb, current.GetEpoch(), tab.sig, &tab.nodeID)
@@ -290,7 +300,9 @@ func TestBuilder_waitForFirstATX(t *testing.T) {
 }
 
 func TestBuilder_StartSmeshingCoinbase(t *testing.T) {
-	tab := newTestBuilder(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t)
+	defer cleanup()
 	coinbase := types.Address{1, 1, 1}
 	postSetupOpts := PostSetupOpts{}
 
@@ -309,8 +321,10 @@ func TestBuilder_StartSmeshingCoinbase(t *testing.T) {
 }
 
 func TestBuilder_RestartSmeshing(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	getBuilder := func(t *testing.T) *Builder {
-		tab := newTestBuilder(t)
+		tab, cleanup := newTestBuilder(t)
+		defer cleanup()
 		tab.mpost.EXPECT().StartSession(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		tab.mpost.EXPECT().GenerateProof(gomock.Any(), gomock.Any()).AnyTimes()
 		tab.mpost.EXPECT().Reset().AnyTimes()
@@ -352,12 +366,16 @@ func TestBuilder_RestartSmeshing(t *testing.T) {
 }
 
 func TestBuilder_StopSmeshing_failsWhenNotStarted(t *testing.T) {
-	tab := newTestBuilder(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t)
+	defer cleanup()
 	require.ErrorContains(t, tab.StopSmeshing(true), "not started")
 }
 
 func TestBuilder_StopSmeshing_OnPoSTError(t *testing.T) {
-	tab := newTestBuilder(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t)
+	defer cleanup()
 	tab.mpost.EXPECT().StartSession(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	tab.mpost.EXPECT().GenerateProof(gomock.Any(), gomock.Any()).Return(nil, nil, nil).AnyTimes()
 	ch := make(chan struct{})
@@ -374,7 +392,9 @@ func TestBuilder_StopSmeshing_OnPoSTError(t *testing.T) {
 }
 
 func TestBuilder_findCommitmentAtx_UsesLatestAtx(t *testing.T) {
-	tab := newTestBuilder(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t)
+	defer cleanup()
 	latestAtx := addPrevAtx(t, tab.cdb, 1, tab.sig, &tab.nodeID)
 	atx, err := tab.findCommitmentAtx()
 	require.NoError(t, err)
@@ -382,14 +402,18 @@ func TestBuilder_findCommitmentAtx_UsesLatestAtx(t *testing.T) {
 }
 
 func TestBuilder_findCommitmentAtx_DefaultsToGoldenAtx(t *testing.T) {
-	tab := newTestBuilder(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t)
+	defer cleanup()
 	atx, err := tab.findCommitmentAtx()
 	require.NoError(t, err)
 	require.Equal(t, tab.goldenATXID, atx)
 }
 
 func TestBuilder_getCommitmentAtx_storesCommitmentAtx(t *testing.T) {
-	tab := newTestBuilder(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t)
+	defer cleanup()
 	tab.commitmentAtx = nil
 
 	atx, err := tab.getCommitmentAtx(context.Background())
@@ -402,7 +426,9 @@ func TestBuilder_getCommitmentAtx_storesCommitmentAtx(t *testing.T) {
 }
 
 func TestBuilder_getCommitmentAtx_getsStoredCommitmentAtx(t *testing.T) {
-	tab := newTestBuilder(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t)
+	defer cleanup()
 	tab.commitmentAtx = nil
 	commitmentAtx := types.RandomATXID()
 
@@ -423,7 +449,9 @@ func TestBuilder_getCommitmentAtx_getsStoredCommitmentAtx(t *testing.T) {
 }
 
 func TestBuilder_getCommitmentAtx_getsCommitmentAtxFromInitialAtx(t *testing.T) {
-	tab := newTestBuilder(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t)
+	defer cleanup()
 	tab.commitmentAtx = nil
 	commitmentAtx := types.RandomATXID()
 
@@ -440,7 +468,9 @@ func TestBuilder_getCommitmentAtx_getsCommitmentAtxFromInitialAtx(t *testing.T) 
 }
 
 func TestBuilder_PublishActivationTx_HappyFlow(t *testing.T) {
-	tab := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer cleanup()
 	posAtxLayer := postGenesisEpoch.FirstLayer()
 	currLayer := posAtxLayer
 	challenge := newChallenge(1, types.ATXID{1, 2, 3}, types.ATXID{1, 2, 3}, posAtxLayer, nil)
@@ -467,8 +497,10 @@ func TestBuilder_PublishActivationTx_HappyFlow(t *testing.T) {
 // Builder::PublishActivationTx properly detects that a challenge it constructed
 // is stale and the poet round has already started.
 func TestBuilder_PublishActivationTx_StaleChallenge(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	// Arrange
-	tab := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	tab, cleanup := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer cleanup()
 	posAtxLayer := postGenesisEpoch.FirstLayer()
 	// current layer is too late to be able to build a nipost on time
 	currLayer := (postGenesisEpoch + 1).FirstLayer()
@@ -497,8 +529,10 @@ func TestBuilder_PublishActivationTx_StaleChallenge(t *testing.T) {
 // TestBuilder_Loop_WaitsOnStaleChallenge checks if loop waits between attempts
 // failing with ErrATXChallengeExpired.
 func TestBuilder_Loop_WaitsOnStaleChallenge(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	// Arrange
-	tab := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	tab, cleanup := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer cleanup()
 	posAtxLayer := postGenesisEpoch.FirstLayer()
 	// current layer is too late to be able to build a nipost on time
 	currLayer := (postGenesisEpoch + 1).FirstLayer()
@@ -533,7 +567,9 @@ func TestBuilder_Loop_WaitsOnStaleChallenge(t *testing.T) {
 }
 
 func TestBuilder_PublishActivationTx_FaultyNet(t *testing.T) {
-	tab := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer cleanup()
 	posAtxLayer := postGenesisEpoch.FirstLayer()
 	currLayer := posAtxLayer
 	challenge := newChallenge(1, types.ATXID{1, 2, 3}, types.ATXID{1, 2, 3}, posAtxLayer, nil)
@@ -621,7 +657,9 @@ func TestBuilder_PublishActivationTx_FaultyNet(t *testing.T) {
 }
 
 func TestBuilder_PublishActivationTx_RebuildNIPostWhenTargetEpochPassed(t *testing.T) {
-	tab := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer cleanup()
 	posAtxLayer := types.EpochID(2).FirstLayer()
 	currLayer := posAtxLayer
 	challenge := newChallenge(1, types.ATXID{1, 2, 3}, types.ATXID{1, 2, 3}, posAtxLayer, nil)
@@ -696,7 +734,9 @@ func TestBuilder_PublishActivationTx_RebuildNIPostWhenTargetEpochPassed(t *testi
 }
 
 func TestBuilder_PublishActivationTx_NoPrevATX(t *testing.T) {
-	tab := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer cleanup()
 	posAtxLayer := postGenesisEpoch.FirstLayer()
 	currLayer := posAtxLayer
 	challenge := newChallenge(1, types.ATXID{1, 2, 3}, types.ATXID{1, 2, 3}, posAtxLayer, nil)
@@ -718,10 +758,12 @@ func TestBuilder_PublishActivationTx_NoPrevATX(t *testing.T) {
 }
 
 func TestBuilder_PublishActivationTx_PrevATXWithoutPrevATX(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 
 	// Arrange
-	tab := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	tab, cleanup := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer cleanup()
 	otherSigner, err := signing.NewEdSigner()
 	r.NoError(err)
 	otherNodeId := otherSigner.NodeID()
@@ -818,10 +860,12 @@ func TestBuilder_PublishActivationTx_PrevATXWithoutPrevATX(t *testing.T) {
 }
 
 func TestBuilder_PublishActivationTx_TargetsEpochBasedOnPosAtx(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 
 	// Arrange
-	tab := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	tab, cleanup := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer cleanup()
 	otherSigner, err := signing.NewEdSigner()
 	r.NoError(err)
 	otherNodeId := otherSigner.NodeID()
@@ -905,7 +949,9 @@ func TestBuilder_PublishActivationTx_TargetsEpochBasedOnPosAtx(t *testing.T) {
 }
 
 func TestBuilder_PublishActivationTx_FailsWhenNIPostBuilderFails(t *testing.T) {
-	tab := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer cleanup()
 	posAtxLayer := postGenesisEpoch.FirstLayer()
 	currLayer := posAtxLayer
 	challenge := newChallenge(1, types.ATXID{1, 2, 3}, types.ATXID{1, 2, 3}, posAtxLayer, nil)
@@ -931,7 +977,9 @@ func TestBuilder_PublishActivationTx_FailsWhenNIPostBuilderFails(t *testing.T) {
 }
 
 func TestBuilder_PublishActivationTx_Serialize(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	cdb := datastore.NewCachedDB(sql.InMemory(), logtest.New(t))
+	defer cdb.Close()
 	sig, err := signing.NewEdSigner()
 	require.NoError(t, err)
 	nid := sig.NodeID()
@@ -955,7 +1003,9 @@ func TestBuilder_PublishActivationTx_Serialize(t *testing.T) {
 }
 
 func TestBuilder_SignAtx(t *testing.T) {
-	tab := newTestBuilder(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t)
+	defer cleanup()
 	prevAtx := types.ATXID(types.HexToHash32("0x111"))
 	challenge := newChallenge(1, prevAtx, prevAtx, types.NewLayerID(15), nil)
 	nipost := newNIPostWithChallenge(types.HexToHash32("55555"), []byte("66666"))
@@ -975,7 +1025,9 @@ func TestBuilder_SignAtx(t *testing.T) {
 }
 
 func TestBuilder_NIPostPublishRecovery(t *testing.T) {
-	tab := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer cleanup()
 	posAtxLayer := postGenesisEpoch.FirstLayer()
 	currLayer := posAtxLayer
 	challenge := newChallenge(1, types.ATXID{1, 2, 3}, types.ATXID{1, 2, 3}, posAtxLayer, nil)
@@ -1075,8 +1127,10 @@ func TestBuilder_NIPostPublishRecovery(t *testing.T) {
 }
 
 func TestBuilder_RetryPublishActivationTx(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	retryInterval := 10 * time.Microsecond
-	tab := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}), WithPoetRetryInterval(retryInterval))
+	tab, cleanup := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}), WithPoetRetryInterval(retryInterval))
+	defer cleanup()
 	posAtxLayer := (postGenesisEpoch + 1).FirstLayer()
 	challenge := newChallenge(1, types.ATXID{1, 2, 3}, types.ATXID{1, 2, 3}, posAtxLayer, nil)
 	poetBytes := []byte("66666")
@@ -1120,10 +1174,10 @@ func TestBuilder_RetryPublishActivationTx(t *testing.T) {
 		tab.loop(ctx)
 		close(runnerExit)
 	}()
-	t.Cleanup(func() {
+	defer func() {
 		cancel()
 		<-runnerExit
-	})
+	}()
 
 	select {
 	case <-builderConfirmation:
@@ -1133,7 +1187,9 @@ func TestBuilder_RetryPublishActivationTx(t *testing.T) {
 }
 
 func TestBuilder_InitialProofGeneratedOnce(t *testing.T) {
-	tab := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	tab, cleanup := newTestBuilder(t, WithPoetConfig(PoetConfig{PhaseShift: layerDuration * 4}))
+	defer cleanup()
 	tab.mpost.EXPECT().GenerateProof(gomock.Any(), gomock.Any())
 	require.NoError(t, tab.generateProof(context.Background()))
 
@@ -1157,13 +1213,15 @@ func TestBuilder_InitialProofGeneratedOnce(t *testing.T) {
 }
 
 func TestBuilder_UpdatePoets(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 
-	tab := newTestBuilder(t, WithPoETClientInitializer(func(string, PoetConfig) (PoetProvingServiceClient, error) {
+	tab, cleanup := newTestBuilder(t, WithPoETClientInitializer(func(string, PoetConfig) (PoetProvingServiceClient, error) {
 		poet := NewMockPoetProvingServiceClient(gomock.NewController(t))
 		poet.EXPECT().PoetServiceID(gomock.Any()).AnyTimes().Return([]byte("poetid"), nil)
 		return poet, nil
 	}))
+	defer cleanup()
 
 	r.Nil(tab.Builder.receivePendingPoetClients())
 
@@ -1177,13 +1235,15 @@ func TestBuilder_UpdatePoets(t *testing.T) {
 }
 
 func TestBuilder_UpdatePoetsUnstable(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 
-	tab := newTestBuilder(t, WithPoETClientInitializer(func(string, PoetConfig) (PoetProvingServiceClient, error) {
+	tab, cleanup := newTestBuilder(t, WithPoETClientInitializer(func(string, PoetConfig) (PoetProvingServiceClient, error) {
 		poet := NewMockPoetProvingServiceClient(gomock.NewController(t))
 		poet.EXPECT().PoetServiceID(gomock.Any()).AnyTimes().Return([]byte("poetid"), errors.New("ERROR"))
 		return poet, nil
 	}))
+	defer cleanup()
 
 	err := tab.Builder.UpdatePoETServers(context.Background(), []string{"http://poet0", "http://poet1"})
 	r.ErrorIs(err, ErrPoetServiceUnstable)

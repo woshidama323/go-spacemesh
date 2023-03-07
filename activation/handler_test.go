@@ -13,6 +13,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/spacemeshos/go-spacemesh/codec"
 	"github.com/spacemeshos/go-spacemesh/common/types"
@@ -44,6 +45,7 @@ func newNIPostWithChallenge(challenge types.Hash32, poetRef []byte) *types.NIPos
 }
 
 func TestHandler_processBlockATXs(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	// Arrange
 	r := require.New(t)
 
@@ -53,6 +55,9 @@ func TestHandler_processBlockATXs(t *testing.T) {
 
 	lg := logtest.New(t)
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	ctrl := gomock.NewController(t)
 	validator := NewMocknipostValidator(ctrl)
 	receiver := NewMockAtxReceiver(ctrl)
@@ -122,6 +127,7 @@ func TestHandler_processBlockATXs(t *testing.T) {
 }
 
 func TestHandler_SyntacticallyValidateAtx(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	// Arrange
 	layers := types.GetLayersPerEpoch()
 	types.SetLayersPerEpoch(layersPerEpochBig)
@@ -129,6 +135,9 @@ func TestHandler_SyntacticallyValidateAtx(t *testing.T) {
 
 	lg := logtest.New(t)
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	ctrl := gomock.NewController(t)
 	validator := NewMocknipostValidator(ctrl)
 	mclock := NewMocklayerClock(ctrl)
@@ -386,6 +395,7 @@ func TestHandler_SyntacticallyValidateAtx(t *testing.T) {
 }
 
 func TestHandler_ContextuallyValidateAtx(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	// Arrange
 	layers := types.GetLayersPerEpoch()
 	types.SetLayersPerEpoch(layersPerEpochBig)
@@ -393,6 +403,9 @@ func TestHandler_ContextuallyValidateAtx(t *testing.T) {
 
 	lg := logtest.New(t).WithName("sigValidation")
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	ctrl := gomock.NewController(t)
 	validator := NewMocknipostValidator(ctrl)
 	receiver := NewMockAtxReceiver(ctrl)
@@ -498,9 +511,13 @@ func TestHandler_ContextuallyValidateAtx(t *testing.T) {
 }
 
 func TestHandler_ProcessAtx(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	// Arrange
 	lg := logtest.New(t)
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 
 	ctrl := gomock.NewController(t)
 	validator := NewMocknipostValidator(ctrl)
@@ -543,9 +560,13 @@ func TestHandler_ProcessAtx(t *testing.T) {
 }
 
 func TestHandler_ProcessAtxStoresNewVRFNonce(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	// Arrange
 	lg := logtest.New(t)
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 
 	ctrl := gomock.NewController(t)
 	validator := NewMocknipostValidator(ctrl)
@@ -587,6 +608,9 @@ func BenchmarkActivationDb_SyntacticallyValidateAtx(b *testing.B) {
 	r := require.New(b)
 	lg := logtest.New(b)
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(b, cdb.Close())
+	}()
 	ctrl := gomock.NewController(b)
 	validator := NewMocknipostValidator(ctrl)
 	validator.EXPECT().NIPost(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(uint64(1), nil).AnyTimes()
@@ -651,6 +675,9 @@ func BenchmarkNewActivationDb(b *testing.B) {
 	r := require.New(b)
 	lg := logtest.New(b)
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(b, cdb.Close())
+	}()
 	ctrl := gomock.NewController(b)
 	validator := NewMocknipostValidator(ctrl)
 	receiver := NewMockAtxReceiver(ctrl)
@@ -714,11 +741,15 @@ func BenchmarkNewActivationDb(b *testing.B) {
 }
 
 func TestHandler_GetPosAtx(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	// Arrange
 	r := require.New(t)
 
 	lg := logtest.New(t)
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	ctrl := gomock.NewController(t)
 	validator := NewMocknipostValidator(ctrl)
 	receiver := NewMockAtxReceiver(ctrl)
@@ -763,11 +794,15 @@ func TestHandler_GetPosAtx(t *testing.T) {
 }
 
 func TestHandler_AwaitAtx(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	// Arrange
 	r := require.New(t)
 
 	lg := logtest.New(t).WithName("sigValidation")
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	ctrl := gomock.NewController(t)
 	validator := NewMocknipostValidator(ctrl)
 	receiver := NewMockAtxReceiver(ctrl)
@@ -821,9 +856,13 @@ func TestHandler_AwaitAtx(t *testing.T) {
 }
 
 func TestHandler_HandleAtxData(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	// Arrange
 	lg := logtest.New(t).WithName("sigValidation")
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	ctrl := gomock.NewController(t)
 	validator := NewMocknipostValidator(ctrl)
 	receiver := NewMockAtxReceiver(ctrl)
@@ -860,6 +899,9 @@ func TestHandler_HandleAtxData(t *testing.T) {
 func BenchmarkGetAtxHeaderWithConcurrentProcessAtx(b *testing.B) {
 	lg := logtest.New(b)
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(b, cdb.Close())
+	}()
 	ctrl := gomock.NewController(b)
 	validator := NewMocknipostValidator(ctrl)
 	receiver := NewMockAtxReceiver(ctrl)
@@ -907,6 +949,7 @@ func BenchmarkGetAtxHeaderWithConcurrentProcessAtx(b *testing.B) {
 
 // Check that we're not trying to sync an ATX that references the golden ATX or an empty ATX (i.e. not adding it to the sync queue).
 func TestHandler_FetchAtxReferences(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctrl := gomock.NewController(t)
 	mockFetch := mocks.NewMockFetcher(ctrl)
 	validator := NewMocknipostValidator(ctrl)
@@ -916,6 +959,9 @@ func TestHandler_FetchAtxReferences(t *testing.T) {
 
 	lg := logtest.New(t)
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	goldenATXID := types.ATXID{2, 3, 4}
 	sig, err := signing.NewEdSigner()
 	require.NoError(t, err)
@@ -963,6 +1009,7 @@ func TestHandler_FetchAtxReferences(t *testing.T) {
 }
 
 func TestHandler_AtxWeight(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	ctrl := gomock.NewController(t)
 	mfetch := mocks.NewMockFetcher(ctrl)
 	mvalidator := NewMocknipostValidator(ctrl)
@@ -979,6 +1026,9 @@ func TestHandler_AtxWeight(t *testing.T) {
 
 	lg := logtest.New(t)
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	goldenATXID := types.ATXID{2, 3, 4}
 	sig, err := signing.NewEdSigner()
 	require.NoError(t, err)

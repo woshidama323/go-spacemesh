@@ -50,27 +50,27 @@ func Test_Validation_VRFNonce(t *testing.T) {
 
 	// Act & Assert
 	t.Run("valid vrf nonce", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		require.NoError(t, v.VRFNonce(nodeId, commitmentAtxId, nonce, meta, initOpts.NumUnits))
 	})
 
 	t.Run("invalid vrf nonce", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		nonce := types.VRFPostIndex(1)
 		require.Error(t, v.VRFNonce(nodeId, commitmentAtxId, &nonce, meta, initOpts.NumUnits))
 	})
 
 	t.Run("wrong commitmentAtxId", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		commitmentAtxId := types.RandomATXID()
 		require.Error(t, v.VRFNonce(nodeId, commitmentAtxId, nonce, meta, initOpts.NumUnits))
 	})
 
 	t.Run("numUnits can be smaller", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		require.NoError(t, v.VRFNonce(nodeId, commitmentAtxId, nonce, meta, initOpts.NumUnits-1))
 	})
@@ -91,7 +91,7 @@ func Test_Validation_InitialNIPostChallenge(t *testing.T) {
 
 	// Act & Assert
 	t.Run("valid initial nipost challenge passes", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		posAtxId := types.ATXID{1, 2, 3}
 		commitmentAtxId := types.ATXID{5, 6, 7}
@@ -115,7 +115,7 @@ func Test_Validation_InitialNIPostChallenge(t *testing.T) {
 	})
 
 	t.Run("valid initial nipost challenge in epoch 1 passes", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		posAtxId := types.ATXID{1, 2, 3}
 		initialPost := &types.Post{
@@ -133,7 +133,7 @@ func Test_Validation_InitialNIPostChallenge(t *testing.T) {
 	})
 
 	t.Run("sequence number is not zero", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		challenge := &types.NIPostChallenge{
 			Sequence: 1,
@@ -143,7 +143,7 @@ func Test_Validation_InitialNIPostChallenge(t *testing.T) {
 	})
 
 	t.Run("missing initial post indices", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		posAtxId := types.ATXID{1, 2, 3}
 
 		challenge := newChallenge(0, *types.EmptyATXID, posAtxId, types.NewLayerID(2), &goldenATXID)
@@ -153,7 +153,7 @@ func Test_Validation_InitialNIPostChallenge(t *testing.T) {
 	})
 
 	t.Run("wrong initial post indices", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		posAtxId := types.ATXID{1, 2, 3}
 		initialPost := &types.Post{
@@ -170,7 +170,7 @@ func Test_Validation_InitialNIPostChallenge(t *testing.T) {
 	})
 
 	t.Run("missing commitment atx", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		posAtxId := types.ATXID{1, 2, 3}
 		initialPost := &types.Post{
@@ -186,7 +186,7 @@ func Test_Validation_InitialNIPostChallenge(t *testing.T) {
 	})
 
 	t.Run("commitment atx from wrong pub layer", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		posAtxId := types.ATXID{1, 2, 3}
 		commitmentAtxId := types.ATXID{5, 6, 7}
@@ -224,7 +224,7 @@ func Test_Validation_NIPostChallenge(t *testing.T) {
 
 	// Act & Assert
 	t.Run("valid nipost challenge passes", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		nodeId := types.RandomNodeID()
 
@@ -247,7 +247,7 @@ func Test_Validation_NIPostChallenge(t *testing.T) {
 	})
 
 	t.Run("prev atx missing", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		nodeId := types.RandomNodeID()
 
@@ -265,7 +265,7 @@ func Test_Validation_NIPostChallenge(t *testing.T) {
 	})
 
 	t.Run("prev ATX from different miner", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		nodeId := types.RandomNodeID()
 		otherNodeId := types.RandomNodeID()
@@ -289,7 +289,7 @@ func Test_Validation_NIPostChallenge(t *testing.T) {
 	})
 
 	t.Run("prev atx from wrong publication layer", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		nodeId := types.RandomNodeID()
 
@@ -312,7 +312,7 @@ func Test_Validation_NIPostChallenge(t *testing.T) {
 	})
 
 	t.Run("prev atx sequence not lower than current", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		nodeId := types.RandomNodeID()
 
@@ -335,7 +335,7 @@ func Test_Validation_NIPostChallenge(t *testing.T) {
 	})
 
 	t.Run("challenge contains initial post indices", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		nodeId := types.RandomNodeID()
 
@@ -359,7 +359,7 @@ func Test_Validation_NIPostChallenge(t *testing.T) {
 	})
 
 	t.Run("challenge contains commitment atx", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		nodeId := types.RandomNodeID()
 
@@ -397,7 +397,7 @@ func Test_Validation_PositioningAtx(t *testing.T) {
 
 	// Act & Assert
 	t.Run("valid nipost challenge passes", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		posAtxId := types.ATXID{1, 2, 3}
 		goldenAtxId := types.ATXID{9, 9, 9}
@@ -415,7 +415,7 @@ func Test_Validation_PositioningAtx(t *testing.T) {
 	})
 
 	t.Run("golden ATX is allowed as positioning atx in genesis epoch", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		goldenAtxId := types.ATXID{9, 9, 9}
 
@@ -426,7 +426,7 @@ func Test_Validation_PositioningAtx(t *testing.T) {
 	})
 
 	t.Run("golden ATX is not allowed as positioning atx in non-genesis epoch", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		goldenAtxId := types.ATXID{9, 9, 9}
 
@@ -437,7 +437,7 @@ func Test_Validation_PositioningAtx(t *testing.T) {
 	})
 
 	t.Run("fail at empty positioning atx", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		goldenAtxId := types.ATXID{9, 9, 9}
 
@@ -448,7 +448,7 @@ func Test_Validation_PositioningAtx(t *testing.T) {
 	})
 
 	t.Run("fail when posAtx is not found", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		posAtxId := types.ATXID{1, 2, 3}
 		goldenAtxId := types.ATXID{9, 9, 9}
@@ -462,7 +462,7 @@ func Test_Validation_PositioningAtx(t *testing.T) {
 	})
 
 	t.Run("positioning atx published in higher layer than expected", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		posAtxId := types.ATXID{1, 2, 3}
 		goldenAtxId := types.ATXID{9, 9, 9}
@@ -480,7 +480,7 @@ func Test_Validation_PositioningAtx(t *testing.T) {
 	})
 
 	t.Run("positioning atx with larger distance than expected", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		posAtxId := types.ATXID{1, 2, 3}
 		goldenAtxId := types.ATXID{9, 9, 9}
@@ -512,7 +512,7 @@ func Test_Validate_NumUnits(t *testing.T) {
 
 	// Act & Assert
 	t.Run("valid number of num units passes", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		err := v.NumUnits(&postCfg, postCfg.MinNumUnits)
 		require.NoError(t, err)
@@ -522,7 +522,7 @@ func Test_Validate_NumUnits(t *testing.T) {
 	})
 
 	t.Run("invalid number of num units fails", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		err := v.NumUnits(&postCfg, postCfg.MinNumUnits-1)
 		require.EqualError(t, err, fmt.Sprintf("invalid `numUnits`; expected: >=%d, given: %d", postCfg.MinNumUnits, postCfg.MinNumUnits-1))
@@ -546,7 +546,7 @@ func Test_Validate_PostMetadata(t *testing.T) {
 
 	// Act & Assert
 	t.Run("valid post metadata", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		meta := &types.PostMetadata{
 			BitsPerLabel:  postCfg.BitsPerLabel,
@@ -560,7 +560,7 @@ func Test_Validate_PostMetadata(t *testing.T) {
 	})
 
 	t.Run("wrong bits per label", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		meta := &types.PostMetadata{
 			BitsPerLabel:  postCfg.BitsPerLabel - 1,
@@ -574,7 +574,7 @@ func Test_Validate_PostMetadata(t *testing.T) {
 	})
 
 	t.Run("wrong labels per unit", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		meta := &types.PostMetadata{
 			BitsPerLabel:  postCfg.BitsPerLabel,
@@ -588,7 +588,7 @@ func Test_Validate_PostMetadata(t *testing.T) {
 	})
 
 	t.Run("wrong k1", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		meta := &types.PostMetadata{
 			BitsPerLabel:  postCfg.BitsPerLabel,
@@ -602,7 +602,7 @@ func Test_Validate_PostMetadata(t *testing.T) {
 	})
 
 	t.Run("wrong k2", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 
 		meta := &types.PostMetadata{
 			BitsPerLabel:  postCfg.BitsPerLabel,
@@ -617,7 +617,7 @@ func Test_Validate_PostMetadata(t *testing.T) {
 }
 
 func TestValidator_Validate(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 	r := require.New(t)
 
 	challenge := types.PoetChallenge{NIPostChallenge: &types.NIPostChallenge{

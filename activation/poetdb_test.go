@@ -12,6 +12,7 @@ import (
 	"github.com/spacemeshos/poet/shared"
 	"github.com/spacemeshos/poet/verifier"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/spacemeshos/go-spacemesh/codec"
 	"github.com/spacemeshos/go-spacemesh/common/types"
@@ -65,6 +66,7 @@ func getPoetProof(t *testing.T) types.PoetProofMessage {
 }
 
 func TestPoetDbHappyFlow(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 	msg := getPoetProof(t)
 	poetDb := NewPoetDb(sql.InMemory(), logtest.New(t))
@@ -90,6 +92,7 @@ func TestPoetDbHappyFlow(t *testing.T) {
 }
 
 func TestPoetDbPoetProofNoMembers(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 
 	poetDb := NewPoetDb(sql.InMemory(), logtest.New(t))
@@ -102,6 +105,7 @@ func TestPoetDbPoetProofNoMembers(t *testing.T) {
 }
 
 func TestPoetDbInvalidPoetProof(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 	msg := getPoetProof(t)
 	poetDb := NewPoetDb(sql.InMemory(), logtest.New(t))
@@ -114,6 +118,7 @@ func TestPoetDbInvalidPoetProof(t *testing.T) {
 }
 
 func TestPoetDbNonExistingKeys(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 	msg := getPoetProof(t)
 	poetDb := NewPoetDb(sql.InMemory(), logtest.New(t))

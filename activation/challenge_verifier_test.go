@@ -57,7 +57,7 @@ func createInitialChallenge(post types.Post, meta types.PostMetadata, numUnits u
 }
 
 func Test_SignatureVerification(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 	req := require.New(t)
 
 	ctrl := gomock.NewController(t)
@@ -87,7 +87,7 @@ func Test_SignatureVerification(t *testing.T) {
 
 // Test challenge validation for challenges carrying an initial Post challenge.
 func Test_ChallengeValidation_Initial(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 	req := require.New(t)
 
 	pubKey, privKey, err := ed25519.GenerateKey(nil)
@@ -110,7 +110,7 @@ func Test_ChallengeValidation_Initial(t *testing.T) {
 	req.NoError(err)
 
 	t.Run("valid", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		challenge := createInitialChallenge(*validPost, *validPostMeta, postConfig.MinNumUnits)
 		challengeBytes, err := codec.Encode(&challenge)
 		req.NoError(err)
@@ -133,7 +133,7 @@ func Test_ChallengeValidation_Initial(t *testing.T) {
 	})
 
 	t.Run("invalid initial NIPostChallenge", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		challenge := createInitialChallenge(*validPost, *validPostMeta, postConfig.MinNumUnits)
 		challenge.Sequence = 1
 		challengeBytes, err := codec.Encode(&challenge)
@@ -153,7 +153,7 @@ func Test_ChallengeValidation_Initial(t *testing.T) {
 	})
 
 	t.Run("InitialPost not provided", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		challenge := createInitialChallenge(*validPost, *validPostMeta, postConfig.MinNumUnits)
 		challenge.InitialPost = nil
 		challengeBytes, err := codec.Encode(&challenge)
@@ -172,7 +172,7 @@ func Test_ChallengeValidation_Initial(t *testing.T) {
 	})
 
 	t.Run("invalid post proof", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		invalidPost := *validPost
 		invalidPost.Nonce += 1
 		challenge := createInitialChallenge(invalidPost, *validPostMeta, postConfig.MinNumUnits)
@@ -196,7 +196,7 @@ func Test_ChallengeValidation_Initial(t *testing.T) {
 	})
 
 	t.Run("invalid num units", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		invalidPost := *validPost
 		invalidPost.Nonce += 1
 		challenge := createInitialChallenge(invalidPost, *validPostMeta, postConfig.MinNumUnits-1)
@@ -215,7 +215,7 @@ func Test_ChallengeValidation_Initial(t *testing.T) {
 	})
 
 	t.Run("invalid post metadata", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		invalidPostMeta := *validPostMeta
 		invalidPostMeta.BitsPerLabel += 1
 		challenge := createInitialChallenge(*validPost, invalidPostMeta, postConfig.MinNumUnits)
@@ -240,7 +240,7 @@ func Test_ChallengeValidation_Initial(t *testing.T) {
 // Test challenge validation for subsequent challenges that
 // use previous ATX as the part of the challenge.
 func Test_ChallengeValidation_NonInitial(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 	req := require.New(t)
 
 	pubKey, privKey, err := ed25519.GenerateKey(nil)
@@ -266,7 +266,7 @@ func Test_ChallengeValidation_NonInitial(t *testing.T) {
 	challengeHash := challenge.Hash()
 
 	t.Run("valid", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		ctrl := gomock.NewController(t)
 		atxProvider := activation.NewMockatxProvider(ctrl)
 		atxProvider.EXPECT().GetAtxHeader(gomock.Any()).AnyTimes().Return(
@@ -290,7 +290,7 @@ func Test_ChallengeValidation_NonInitial(t *testing.T) {
 	})
 
 	t.Run("positioning ATX validation fails with ErrAtxNotFound", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		ctrl := gomock.NewController(t)
 		atxProvider := activation.NewMockatxProvider(ctrl)
 		atxProvider.EXPECT().GetAtxHeader(challenge.PositioningATX).AnyTimes().Return(nil, errAtxNotFound)
@@ -306,7 +306,7 @@ func Test_ChallengeValidation_NonInitial(t *testing.T) {
 	})
 
 	t.Run("positioning ATX validation fails with other error", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		ctrl := gomock.NewController(t)
 		atxProvider := activation.NewMockatxProvider(ctrl)
 		atxProvider.EXPECT().GetAtxHeader(challenge.PositioningATX).AnyTimes().Return(&types.ActivationTxHeader{}, nil)
@@ -322,7 +322,7 @@ func Test_ChallengeValidation_NonInitial(t *testing.T) {
 	})
 
 	t.Run("nipost challenge validation fail", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel()
 		ctrl := gomock.NewController(t)
 		atxProvider := activation.NewMockatxProvider(ctrl)
 		atxProvider.EXPECT().GetAtxHeader(challenge.PositioningATX).AnyTimes().Return(&types.ActivationTxHeader{}, nil)

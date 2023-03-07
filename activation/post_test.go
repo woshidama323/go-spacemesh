@@ -7,6 +7,7 @@ import (
 
 	"github.com/spacemeshos/post/initialization"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
@@ -29,9 +30,13 @@ func getTestConfig(t *testing.T) (PostConfig, PostSetupOpts) {
 }
 
 func TestPostSetupManager(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	req := require.New(t)
 
 	cdb := datastore.NewCachedDB(sql.InMemory(), logtest.New(t))
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	goldenATXID := types.ATXID{2, 3, 4}
 	cfg, opts := getTestConfig(t)
 	mgr, err := NewPostSetupManager(id, cfg, logtest.New(t), cdb, goldenATXID)
@@ -80,9 +85,13 @@ func TestPostSetupManager(t *testing.T) {
 }
 
 func TestPostSetupManager_InitialStatus(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	req := require.New(t)
 
 	cdb := datastore.NewCachedDB(sql.InMemory(), logtest.New(t))
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	goldenATXID := types.ATXID{2, 3, 4}
 	cfg, opts := getTestConfig(t)
 	mgr, err := NewPostSetupManager(id, cfg, logtest.New(t), cdb, goldenATXID)
@@ -108,10 +117,14 @@ func TestPostSetupManager_InitialStatus(t *testing.T) {
 }
 
 func TestPostSetupManager_GenerateProof(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	req := require.New(t)
 	ch := make([]byte, 32)
 
 	cdb := datastore.NewCachedDB(sql.InMemory(), logtest.New(t))
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	goldenATXID := types.ATXID{2, 3, 4}
 	cfg, opts := getTestConfig(t)
 	mgr, err := NewPostSetupManager(id, cfg, logtest.New(t), cdb, goldenATXID)
@@ -138,9 +151,13 @@ func TestPostSetupManager_GenerateProof(t *testing.T) {
 }
 
 func TestPostSetupManager_VRFNonce(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	req := require.New(t)
 
 	cdb := datastore.NewCachedDB(sql.InMemory(), logtest.New(t))
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	goldenATXID := types.ATXID{2, 3, 4}
 	cfg, opts := getTestConfig(t)
 	mgr, err := NewPostSetupManager(id, cfg, logtest.New(t), cdb, goldenATXID)
@@ -168,9 +185,13 @@ func TestPostSetupManager_VRFNonce(t *testing.T) {
 }
 
 func TestPostSetupManager_Stop(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	req := require.New(t)
 
 	cdb := datastore.NewCachedDB(sql.InMemory(), logtest.New(t))
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	goldenATXID := types.ATXID{2, 3, 4}
 	cfg, opts := getTestConfig(t)
 	mgr, err := NewPostSetupManager(id, cfg, logtest.New(t), cdb, goldenATXID)
@@ -201,9 +222,13 @@ func TestPostSetupManager_Stop(t *testing.T) {
 }
 
 func TestPostSetupManager_Stop_WhileInProgress(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	req := require.New(t)
 
 	cdb := datastore.NewCachedDB(sql.InMemory(), logtest.New(t))
+	defer func() {
+		require.NoError(t, cdb.Close())
+	}()
 	goldenATXID := types.ATXID{2, 3, 4}
 	cfg, opts := getTestConfig(t)
 	opts.NumUnits *= 10
