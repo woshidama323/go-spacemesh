@@ -14,6 +14,7 @@ import (
 	"github.com/spacemeshos/go-scale/tester"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/common/util"
@@ -40,7 +41,7 @@ type testOracle struct {
 	mNonceFetcher *MocknonceFetcher
 }
 
-func defaultOracle(t testing.TB) *testOracle {
+func defaultOracle(t testing.TB) (oracle *testOracle, cleanup func()) {
 	types.SetLayersPerEpoch(defLayersPerEpoch)
 	lg := logtest.New(t)
 	cdb := datastore.NewCachedDB(sql.InMemory(), lg)
@@ -58,7 +59,10 @@ func defaultOracle(t testing.TB) *testOracle {
 		mVerifier:     verifier,
 		mNonceFetcher: nonceFetcher,
 	}
-	return to
+	return to, func() {
+		err := cdb.Close()
+		require.NoError(t, err)
+	}
 }
 
 func createLayerData(tb testing.TB, cdb *datastore.CachedDB, lid types.LayerID, beacon types.Beacon, numMiners int) {
@@ -117,7 +121,9 @@ func createMapWithSize(n int) map[types.NodeID]uint64 {
 }
 
 func TestCalcEligibility_ZeroCommittee(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	nid := types.NodeID{1, 1}
 	nonce := types.VRFPostIndex(1)
 	res, err := o.CalcEligibility(context.Background(), types.NewLayerID(50), 1, 0, nid, nonce, []byte{})
@@ -126,7 +132,9 @@ func TestCalcEligibility_ZeroCommittee(t *testing.T) {
 }
 
 func TestCalcEligibility_BeaconFailure(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	nid := types.NodeID{1, 1}
 	nonce := types.VRFPostIndex(1)
 	layer := types.NewLayerID(50)
@@ -139,7 +147,9 @@ func TestCalcEligibility_BeaconFailure(t *testing.T) {
 }
 
 func TestCalcEligibility_VerifyFailure(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	nid := types.NodeID{1, 1}
 	nonce := types.VRFPostIndex(1)
 	layer := types.NewLayerID(50)
@@ -152,7 +162,9 @@ func TestCalcEligibility_VerifyFailure(t *testing.T) {
 }
 
 func TestCalcEligibility_EmptyActiveSet(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	nid := types.NodeID{1, 1}
 	nonce := types.VRFPostIndex(1)
 	layer := types.NewLayerID(40)
@@ -185,7 +197,9 @@ func TestCalcEligibility_EmptyActiveSet(t *testing.T) {
 }
 
 func TestCalcEligibility_EligibleFromHareActiveSet(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	layer := types.NewLayerID(50)
 	beacon := beaconWithValOne()
 	createLayerData(t, o.cdb, layer, beacon, 5)
@@ -213,7 +227,9 @@ func TestCalcEligibility_EligibleFromHareActiveSet(t *testing.T) {
 }
 
 func TestCalcEligibility_EligibleFromTortoiseActiveSet(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	layer := types.NewLayerID(40)
 	beacon := beaconWithValOne()
 	start, end := safeLayerRange(layer, confidenceParam, defLayersPerEpoch, epochOffset)
@@ -247,11 +263,13 @@ func TestCalcEligibility_EligibleFromTortoiseActiveSet(t *testing.T) {
 }
 
 func TestCalcEligibility_WithSpaceUnits(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 	numOfMiners := 50
 	committeeSize := 800
 
-	o := defaultOracle(t)
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	o.mVerifier.EXPECT().Verify(gomock.Any(), gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 
 	layer := types.NewLayerID(50)
@@ -290,12 +308,14 @@ func TestCalcEligibility_WithSpaceUnits(t *testing.T) {
 }
 
 func Test_CalcEligibility_MainnetParams(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
 	numOfMiners := 2000
 	committeeSize := 800
 	rng := rand.New(rand.NewSource(999))
 
-	o := defaultOracle(t)
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	o.mVerifier.EXPECT().Verify(gomock.Any(), gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 
 	layer := types.NewLayerID(50)
@@ -338,7 +358,8 @@ func Test_CalcEligibility_MainnetParams(t *testing.T) {
 func BenchmarkOracle_CalcEligibility(b *testing.B) {
 	r := require.New(b)
 
-	o := defaultOracle(b)
+	o, cleanup := defaultOracle(b)
+	defer cleanup()
 	numOfMiners := 2000
 	committeeSize := 800
 
@@ -372,13 +393,15 @@ func BenchmarkOracle_CalcEligibility(b *testing.B) {
 }
 
 func Test_VrfSignVerify(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	// eligibility of the proof depends on the identity
 	rng := rand.New(rand.NewSource(5))
 
 	signer, err := signing.NewEdSigner(signing.WithKeyFromRand(rng))
 	require.NoError(t, err)
 
-	o := defaultOracle(t)
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	o.vrfSigner, err = signer.VRFSigner()
 	require.NoError(t, err)
 	nid := signer.NodeID()
@@ -450,7 +473,9 @@ func Test_VrfSignVerify(t *testing.T) {
 }
 
 func Test_Proof_BeaconError(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 
 	signer, err := signing.NewEdSigner()
 	require.NoError(t, err)
@@ -467,7 +492,9 @@ func Test_Proof_BeaconError(t *testing.T) {
 }
 
 func Test_Proof(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	layer := types.NewLayerID(2)
 	o.mBeacon.EXPECT().GetBeacon(layer.GetEpoch()).Return(beaconWithValOne(), nil).Times(1)
 
@@ -483,7 +510,9 @@ func Test_Proof(t *testing.T) {
 }
 
 func TestOracle_IsIdentityActive(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	layer := types.NewLayerID(40)
 	start, end := safeLayerRange(layer, confidenceParam, defLayersPerEpoch, epochOffset)
 	require.Equal(t, start, end)
@@ -547,7 +576,9 @@ func TestOracle_IsIdentityActive(t *testing.T) {
 }
 
 func TestBuildVRFMessage_BeaconError(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	errUnknown := errors.New("unknown")
 	o.mBeacon.EXPECT().GetBeacon(gomock.Any()).Return(types.EmptyBeacon, errUnknown).Times(1)
 	msg, err := o.buildVRFMessage(context.Background(), types.VRFPostIndex(1), types.NewLayerID(1), 1)
@@ -556,7 +587,9 @@ func TestBuildVRFMessage_BeaconError(t *testing.T) {
 }
 
 func TestBuildVRFMessage(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	nonce := types.VRFPostIndex(2)
 	firstLayer := types.NewLayerID(1)
 	secondLayer := firstLayer.Add(1)
@@ -585,7 +618,9 @@ func TestBuildVRFMessage(t *testing.T) {
 }
 
 func TestBuildVRFMessage_Concurrency(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 
 	total := 1000
 	expectAdd := 10
@@ -605,6 +640,7 @@ func TestBuildVRFMessage_Concurrency(t *testing.T) {
 }
 
 func TestSafeLayerRange(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	types.SetLayersPerEpoch(defLayersPerEpoch)
 	safetyParam := uint32(10)
 	effGenesis := types.GetEffectiveGenesis()
@@ -645,7 +681,9 @@ func TestSafeLayerRange(t *testing.T) {
 }
 
 func TestActives_HareActiveSet(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	numMiners := 5
 	layer := types.NewLayerID(50)
 	beacon := types.RandomBeacon()
@@ -659,7 +697,9 @@ func TestActives_HareActiveSet(t *testing.T) {
 }
 
 func TestActives_HareActiveSetDifferentBeacon(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	layer := types.NewLayerID(50)
 	start, end := safeLayerRange(layer, confidenceParam, defLayersPerEpoch, epochOffset)
 
@@ -696,7 +736,9 @@ func TestActives_HareActiveSetDifferentBeacon(t *testing.T) {
 }
 
 func TestActives_HareActiveSetMultipleLayers(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	layer := types.NewLayerID(100)
 	start, end := safeLayerRange(layer, confidenceParam, defLayersPerEpoch, epochOffset)
 	require.NotEqual(t, start, end)
@@ -732,7 +774,9 @@ func TestActives_HareActiveSetMultipleLayers(t *testing.T) {
 }
 
 func TestActives_HareActiveSetCached(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	numMiners := 5
 	layer := types.NewLayerID(38) // manually calculated. first layer of the safe layer range
 	beacon := types.RandomBeacon()
@@ -764,7 +808,9 @@ func TestActives_HareActiveSetCached(t *testing.T) {
 }
 
 func TestActives_EmptyTortoiseActiveSet(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	layer := types.NewLayerID(40)
 	start, _ := safeLayerRange(layer, confidenceParam, defLayersPerEpoch, epochOffset)
 	o.mBeacon.EXPECT().GetBeacon(start.GetEpoch()).Return(types.RandomBeacon(), nil).Times(1)
@@ -774,7 +820,9 @@ func TestActives_EmptyTortoiseActiveSet(t *testing.T) {
 }
 
 func TestActives_TortoiseActiveSet(t *testing.T) {
-	o := defaultOracle(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	layer := types.NewLayerID(40)
 	start, _ := safeLayerRange(layer, confidenceParam, defLayersPerEpoch, epochOffset)
 	o.mBeacon.EXPECT().GetBeacon(start.GetEpoch()).Return(types.RandomBeacon(), nil).Times(2)
@@ -827,8 +875,10 @@ func TestActives_TortoiseActiveSet(t *testing.T) {
 }
 
 func TestActives_ConcurrentCalls(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	r := require.New(t)
-	o := defaultOracle(t)
+	o, cleanup := defaultOracle(t)
+	defer cleanup()
 	layer := types.NewLayerID(100)
 	start, _ := safeLayerRange(layer, confidenceParam, defLayersPerEpoch, epochOffset)
 	beacon := types.RandomBeacon()
@@ -868,6 +918,7 @@ func TestActives_ConcurrentCalls(t *testing.T) {
 }
 
 func TestMaxSupportedN(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	n := maxSupportedN
 	p := fixed.DivUint64(800, uint64(n*100))
 	x := 0
