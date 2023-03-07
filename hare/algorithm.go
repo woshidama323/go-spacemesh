@@ -539,7 +539,7 @@ func (proc *consensusProcess) sendMessage(ctx context.Context, msg *Msg) bool {
 		log.Uint32("msg_round", msg.Round),
 		log.String("msg_type", msg.InnerMsg.Type.String()),
 		log.Int("eligibility_count", int(msg.Eligibility.Count)),
-		log.String("current_set", proc.value.String()),
+		// log.String("current_set", proc.value.String()),
 		log.Uint32("current_round", proc.getRound()),
 	)
 	logger := proc.WithContext(ctx)
@@ -640,6 +640,7 @@ func (proc *consensusProcess) beginProposalRound(ctx context.Context) {
 }
 
 func (proc *consensusProcess) beginCommitRound(ctx context.Context) {
+	proc.WithContext(ctx).With().Warning("begin commit round", proc.layer)
 	proposedSet := proc.proposalTracker.ProposedSet()
 
 	// proposedSet may be nil, in such case the tracker will ignore Messages
@@ -653,11 +654,13 @@ func (proc *consensusProcess) beginCommitRound(ctx context.Context) {
 		proposedSet)
 
 	if proposedSet == nil {
+		proc.WithContext(ctx).With().Warning("proposed set is nil", proc.layer)
 		return
 	}
 
 	// check participation
 	if !proc.shouldParticipate(ctx) {
+		proc.WithContext(ctx).With().Warning("should not participate", proc.layer)
 		return
 	}
 
@@ -807,6 +810,9 @@ func (proc *consensusProcess) processProposalMsg(ctx context.Context, msg *Msg) 
 		proc.proposalTracker.OnProposal(ctx, msg)
 	} else if currRnd == commitRound { // late proposal
 		proc.proposalTracker.OnLateProposal(ctx, msg)
+		proc.WithContext(ctx).With().Warning("received late proposal",
+			log.Uint32("current_round", proc.getRound()),
+			log.Uint32("msg_round", msg.Round))
 	} else {
 		proc.WithContext(ctx).With().Warning("received proposal message for processing in an invalid context",
 			log.Uint32("current_round", proc.getRound()),
