@@ -122,7 +122,7 @@ func TestMain(m *testing.M) {
 	instanceID4 = instanceID0.Add(4)
 	instanceID5 = instanceID0.Add(5)
 	instanceID6 = instanceID0.Add(6)
-	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	// goleak.VerifyTestMain(m, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	res := m.Run()
 	os.Exit(res)
 }

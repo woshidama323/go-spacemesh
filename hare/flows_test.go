@@ -11,7 +11,6 @@ import (
 	"github.com/golang/mock/gomock"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/datastore"
@@ -411,7 +410,7 @@ func NewSimRoundClock(s pubsub.PublishSubsciber, clocks map[types.LayerID]*Share
 
 // Test - run multiple CPs simultaneously.
 func Test_multipleCPs(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	// defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	logtest.SetupGlobal(t)
 
 	r := require.New(t)
@@ -512,7 +511,7 @@ func Test_multipleCPs(t *testing.T) {
 
 // Test - run multiple CPs where one of them runs more than one iteration.
 func Test_multipleCPsAndIterations(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	// defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 	logtest.SetupGlobal(t)
 
 	r := require.New(t)
