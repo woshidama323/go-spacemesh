@@ -38,6 +38,15 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
 }
 
+func checkLeaks(t *testing.T) {
+	// both these top level functions are kicked off at init by libp2p
+	defer goleak.VerifyNone(
+		t,
+		goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"),
+		goleak.IgnoreTopFunction("github.com/libp2p/go-libp2p-asn-util.newIndirectAsnStore"),
+	)
+}
+
 type testOracle struct {
 	*Oracle
 	mBeacon       *mocks.MockBeaconGetter
@@ -125,7 +134,7 @@ func createMapWithSize(n int) map[types.NodeID]uint64 {
 }
 
 func TestCalcEligibility_ZeroCommittee(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	nid := types.NodeID{1, 1}
@@ -136,7 +145,7 @@ func TestCalcEligibility_ZeroCommittee(t *testing.T) {
 }
 
 func TestCalcEligibility_BeaconFailure(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	nid := types.NodeID{1, 1}
@@ -151,7 +160,7 @@ func TestCalcEligibility_BeaconFailure(t *testing.T) {
 }
 
 func TestCalcEligibility_VerifyFailure(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	nid := types.NodeID{1, 1}
@@ -166,7 +175,7 @@ func TestCalcEligibility_VerifyFailure(t *testing.T) {
 }
 
 func TestCalcEligibility_EmptyActiveSet(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	nid := types.NodeID{1, 1}
@@ -201,7 +210,7 @@ func TestCalcEligibility_EmptyActiveSet(t *testing.T) {
 }
 
 func TestCalcEligibility_EligibleFromHareActiveSet(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	layer := types.NewLayerID(50)
@@ -231,7 +240,7 @@ func TestCalcEligibility_EligibleFromHareActiveSet(t *testing.T) {
 }
 
 func TestCalcEligibility_EligibleFromTortoiseActiveSet(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	layer := types.NewLayerID(40)
@@ -267,7 +276,7 @@ func TestCalcEligibility_EligibleFromTortoiseActiveSet(t *testing.T) {
 }
 
 func TestCalcEligibility_WithSpaceUnits(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	r := require.New(t)
 	numOfMiners := 50
 	committeeSize := 800
@@ -312,7 +321,7 @@ func TestCalcEligibility_WithSpaceUnits(t *testing.T) {
 }
 
 func Test_CalcEligibility_MainnetParams(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	r := require.New(t)
 	numOfMiners := 2000
 	committeeSize := 800
@@ -397,7 +406,7 @@ func BenchmarkOracle_CalcEligibility(b *testing.B) {
 }
 
 func Test_VrfSignVerify(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	// eligibility of the proof depends on the identity
 	rng := rand.New(rand.NewSource(5))
 
@@ -477,7 +486,7 @@ func Test_VrfSignVerify(t *testing.T) {
 }
 
 func Test_Proof_BeaconError(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 
@@ -496,7 +505,7 @@ func Test_Proof_BeaconError(t *testing.T) {
 }
 
 func Test_Proof(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	layer := types.NewLayerID(2)
@@ -514,7 +523,7 @@ func Test_Proof(t *testing.T) {
 }
 
 func TestOracle_IsIdentityActive(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	layer := types.NewLayerID(40)
@@ -580,7 +589,7 @@ func TestOracle_IsIdentityActive(t *testing.T) {
 }
 
 func TestBuildVRFMessage_BeaconError(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	errUnknown := errors.New("unknown")
@@ -591,7 +600,7 @@ func TestBuildVRFMessage_BeaconError(t *testing.T) {
 }
 
 func TestBuildVRFMessage(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	nonce := types.VRFPostIndex(2)
@@ -622,7 +631,7 @@ func TestBuildVRFMessage(t *testing.T) {
 }
 
 func TestBuildVRFMessage_Concurrency(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 
@@ -644,7 +653,7 @@ func TestBuildVRFMessage_Concurrency(t *testing.T) {
 }
 
 func TestSafeLayerRange(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	types.SetLayersPerEpoch(defLayersPerEpoch)
 	safetyParam := uint32(10)
 	effGenesis := types.GetEffectiveGenesis()
@@ -685,7 +694,7 @@ func TestSafeLayerRange(t *testing.T) {
 }
 
 func TestActives_HareActiveSet(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	numMiners := 5
@@ -701,7 +710,7 @@ func TestActives_HareActiveSet(t *testing.T) {
 }
 
 func TestActives_HareActiveSetDifferentBeacon(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	layer := types.NewLayerID(50)
@@ -740,7 +749,7 @@ func TestActives_HareActiveSetDifferentBeacon(t *testing.T) {
 }
 
 func TestActives_HareActiveSetMultipleLayers(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	layer := types.NewLayerID(100)
@@ -778,7 +787,7 @@ func TestActives_HareActiveSetMultipleLayers(t *testing.T) {
 }
 
 func TestActives_HareActiveSetCached(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	numMiners := 5
@@ -812,7 +821,7 @@ func TestActives_HareActiveSetCached(t *testing.T) {
 }
 
 func TestActives_EmptyTortoiseActiveSet(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	layer := types.NewLayerID(40)
@@ -824,7 +833,7 @@ func TestActives_EmptyTortoiseActiveSet(t *testing.T) {
 }
 
 func TestActives_TortoiseActiveSet(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
 	layer := types.NewLayerID(40)
@@ -879,7 +888,7 @@ func TestActives_TortoiseActiveSet(t *testing.T) {
 }
 
 func TestActives_ConcurrentCalls(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	r := require.New(t)
 	o, cleanup := defaultOracle(t)
 	defer cleanup()
@@ -922,7 +931,7 @@ func TestActives_ConcurrentCalls(t *testing.T) {
 }
 
 func TestMaxSupportedN(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+	defer checkLeaks(t)
 	n := maxSupportedN
 	p := fixed.DivUint64(800, uint64(n*100))
 	x := 0
