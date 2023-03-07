@@ -109,7 +109,7 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 		return errNilInner
 	}
 
-	logger.Debug("broker received hare message")
+	logger.Error("broker received hare message")
 
 	msgLayer := hareMsg.Layer
 

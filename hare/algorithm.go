@@ -543,6 +543,7 @@ func (proc *consensusProcess) sendMessage(ctx context.Context, msg *Msg) bool {
 		log.Uint32("current_round", proc.getRound()),
 	)
 	logger := proc.WithContext(ctx)
+	logger.Error("sending message")
 
 	if err := proc.publisher.Publish(ctx, pubsub.HareProtocol, msg.Bytes()); err != nil {
 		logger.With().Error("failed to broadcast round message", log.Err(err))
