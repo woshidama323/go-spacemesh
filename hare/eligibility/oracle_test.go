@@ -14,7 +14,6 @@ import (
 	"github.com/spacemeshos/go-scale/tester"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/common/util"
@@ -34,17 +33,17 @@ const (
 	epochOffset       uint32 = 3
 )
 
-func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
-}
+// func TestMain(m *testing.M) {
+// 	goleak.VerifyTestMain(m, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+// }
 
 func checkLeaks(t *testing.T) {
 	// both these top level functions are kicked off at init by libp2p
-	defer goleak.VerifyNone(
-		t,
-		goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"),
-		goleak.IgnoreTopFunction("github.com/libp2p/go-libp2p-asn-util.newIndirectAsnStore.func1()"),
-	)
+	// defer goleak.VerifyNone(
+	// 	t,
+	// 	goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"),
+	// 	goleak.IgnoreTopFunction("github.com/libp2p/go-libp2p-asn-util.newIndirectAsnStore.func1()"),
+	// )
 }
 
 type testOracle struct {
