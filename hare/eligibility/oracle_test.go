@@ -43,7 +43,7 @@ func checkLeaks(t *testing.T) {
 	defer goleak.VerifyNone(
 		t,
 		goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"),
-		goleak.IgnoreTopFunction("github.com/libp2p/go-libp2p-asn-util.newIndirectAsnStore"),
+		goleak.IgnoreTopFunction("github.com/libp2p/go-libp2p-asn-util.newIndirectAsnStore.func1()"),
 	)
 }
 
