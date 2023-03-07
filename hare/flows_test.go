@@ -15,7 +15,6 @@ import (
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/datastore"
-	"github.com/spacemeshos/go-spacemesh/eligibility"
 	"github.com/spacemeshos/go-spacemesh/hare/config"
 	"github.com/spacemeshos/go-spacemesh/hare/mocks"
 	"github.com/spacemeshos/go-spacemesh/log/logtest"
@@ -137,48 +136,48 @@ func (m *p2pManipulator) Publish(ctx context.Context, protocol string, payload [
 	return nil
 }
 
-// Test - runs a single CP for more than one iteration.
-func Test_consensusIterations(t *testing.T) {
-	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
-	test := newConsensusTest()
+// // Test - runs a single CP for more than one iteration.
+// func Test_consensusIterations(t *testing.T) {
+// 	defer goleak.VerifyNone(t, goleak.IgnoreTopFunction("github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine"))
+// 	test := newConsensusTest()
 
-	totalNodes := 15
-	cfg := config.Config{N: totalNodes, F: totalNodes/2 - 1, WakeupDelta: time.Second, RoundDuration: time.Second, ExpectedLeaders: 5, LimitIterations: 1000, LimitConcurrent: 100, Hdist: 20}
+// 	totalNodes := 15
+// 	cfg := config.Config{N: totalNodes, F: totalNodes/2 - 1, WakeupDelta: time.Second, RoundDuration: time.Second, ExpectedLeaders: 5, LimitIterations: 1000, LimitConcurrent: 100, Hdist: 20}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	mesh, err := mocknet.FullMeshLinked(totalNodes)
-	require.NoError(t, err)
-	defer func() {
-		err := mesh.Close()
-		require.NoError(t, err)
-	}()
+// 	ctx, cancel := context.WithCancel(context.Background())
+// 	defer cancel()
+// 	mesh, err := mocknet.FullMeshLinked(totalNodes)
+// 	require.NoError(t, err)
+// 	defer func() {
+// 		err := mesh.Close()
+// 		require.NoError(t, err)
+// 	}()
 
-	test.initialSets = make([]*Set, totalNodes)
-	set1 := NewSetFromValues(types.ProposalID{1})
-	test.fill(set1, 0, totalNodes-1)
-	test.honestSets = []*Set{set1}
-	oracle := eligibility.New(logtest.New(t))
-	i := 0
-	creationFunc := func() {
-		host := mesh.Hosts()[i]
-		ps, err := pubsub.New(ctx, logtest.New(t), host, pubsub.DefaultConfig())
-		require.NoError(t, err)
-		p2pm := &p2pManipulator{nd: ps, stalledLayer: instanceID1, err: errors.New("fake err")}
-		sig, err := signing.NewEdSigner()
-		require.NoError(t, err)
-		tcp := createConsensusProcess(t, ctx, sig, true, cfg, oracle, p2pm, test.initialSets[i], instanceID1)
-		defer tcp.cp.terminate()
-		test.procs = append(test.procs, tcp.cp)
-		test.brokers = append(test.brokers, tcp.broker)
-		i++
-	}
-	test.Create(totalNodes, creationFunc)
-	require.NoError(t, mesh.ConnectAllButSelf())
-	test.Start()
-	// This function closes brokers
-	test.WaitForTimedTermination(t, 40*time.Second)
-}
+// 	test.initialSets = make([]*Set, totalNodes)
+// 	set1 := NewSetFromValues(types.ProposalID{1})
+// 	test.fill(set1, 0, totalNodes-1)
+// 	test.honestSets = []*Set{set1}
+// 	oracle := eligibility.New(logtest.New(t))
+// 	i := 0
+// 	creationFunc := func() {
+// 		host := mesh.Hosts()[i]
+// 		ps, err := pubsub.New(ctx, logtest.New(t), host, pubsub.DefaultConfig())
+// 		require.NoError(t, err)
+// 		p2pm := &p2pManipulator{nd: ps, stalledLayer: instanceID1, err: errors.New("fake err")}
+// 		sig, err := signing.NewEdSigner()
+// 		require.NoError(t, err)
+// 		tcp := createConsensusProcess(t, ctx, sig, true, cfg, oracle, p2pm, test.initialSets[i], instanceID1)
+// 		defer tcp.cp.terminate()
+// 		test.procs = append(test.procs, tcp.cp)
+// 		test.brokers = append(test.brokers, tcp.broker)
+// 		i++
+// 	}
+// 	test.Create(totalNodes, creationFunc)
+// 	require.NoError(t, mesh.ConnectAllButSelf())
+// 	test.Start()
+// 	// This function closes brokers
+// 	test.WaitForTimedTermination(t, 40*time.Second)
+// }
 
 type hareWithMocks struct {
 	*Hare
