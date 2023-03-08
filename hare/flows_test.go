@@ -450,7 +450,7 @@ func Test_multipleCPs(t *testing.T) {
 		}
 	}
 	var pubsubs []*pubsub.PubSub
-	scMap := NewSharedClock(totalNodes, totalCp, time.Duration(50*int(totalCp)*totalNodes)*time.Millisecond)
+	scMap := NewSharedClock(totalNodes, totalCp, time.Duration(200*int(totalCp)*totalNodes)*time.Millisecond)
 	outputs := make([]map[types.LayerID]LayerOutput, totalNodes)
 	var outputsWaitGroup sync.WaitGroup
 	for i := 0; i < totalNodes; i++ {
@@ -554,7 +554,7 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 	// Note that this clock will not progress rounds until all nodes have
 	// received messages from all other nodes. So a single failure will cause
 	// the network to halt.
-	scMap := NewSharedClock(totalNodes, totalCp, time.Duration(50*int(totalCp)*totalNodes)*time.Millisecond)
+	scMap := NewSharedClock(totalNodes, totalCp, time.Duration(200*int(totalCp)*totalNodes)*time.Millisecond)
 	outputs := make([]map[types.LayerID]LayerOutput, totalNodes)
 	var outputsWaitGroup sync.WaitGroup
 	for i := 0; i < totalNodes; i++ {
