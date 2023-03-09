@@ -509,7 +509,7 @@ func (proc *consensusProcess) processMsg(ctx context.Context, m *Msg) {
 
 	switch m.InnerMsg.Type {
 	case pre:
-		duration := time.Since(proc.layerTime)
+		duration := time.Since(proc.layerTime) / time.Second
 		if duration > 0 {
 			preRoundDelaySeconds.Observe(float64(duration))
 		}
