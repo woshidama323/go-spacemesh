@@ -1,5 +1,8 @@
 # Systest
 
+Notes: 
+Make sure you've commited any changes you want to appear in the tests.
+
 ## Installation
 
 This testing setup can run on top of any k8s installation. The instructions below uses `minikube`.
