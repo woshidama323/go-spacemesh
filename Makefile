@@ -175,7 +175,7 @@ list-versions:
 .PHONY: list-versions
 
 dockerbuild-go:
-	DOCKER_BUILDKIT=1 docker build -t $(DOCKER_IMAGE) .
+	DOCKER_BUILDKIT=1 docker build -t $(DOCKER_HUB)/$(DOCKER_IMAGE) .
 .PHONY: dockerbuild-go
 
 dockerpush: dockerbuild-go dockerpush-only
