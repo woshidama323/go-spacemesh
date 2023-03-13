@@ -6,6 +6,7 @@
         "grace-period": "5s"
     },
     "logging": {
-        "trtl": "debug"
+        "trtl": "debug",
+        "hare": "debug"
     }
 }
