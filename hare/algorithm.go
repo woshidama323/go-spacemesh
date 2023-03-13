@@ -512,6 +512,8 @@ func (proc *consensusProcess) processMsg(ctx context.Context, m *Msg) {
 		duration := time.Since(proc.layerTime) / time.Second
 		if duration > 0 {
 			preRoundDelaySeconds.Observe(float64(duration))
+		} else {
+			proc.WithContext(ctx).Error("Negative pre round delay %v", duration)
 		}
 		proc.processPreRoundMsg(ctx, m)
 		// Do metric here
