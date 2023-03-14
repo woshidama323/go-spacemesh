@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -1190,5 +1191,6 @@ func decodeLoggers(cfg config.LoggerConfig) (map[string]string, error) {
 	if err := mapstructure.Decode(cfg, &rst); err != nil {
 		return nil, fmt.Errorf("mapstructure decode: %w", err)
 	}
+	fmt.Printf("logger config %v, stack:\n %v", rst, string(debug.Stack()))
 	return rst, nil
 }

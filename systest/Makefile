@@ -75,6 +75,10 @@ run: gomplate $(run_deps)
 	kubectl logs job/$(test_job_name) -f --ignore-errors
 	test_job_name=$(test_job_name) ./wait_for_job.sh
 
+# clean cleans up all resources related to a test run that did not specify
+# keep=true (used for starting a long running network). Test runs are
+# identified by the current head commit at the piont the test was run, so if
+# you have comitted in the meantime, clean will fail.
 .PHONY: clean
 clean:
 	@echo "deleting configmaps with testid=$(test_id)"
@@ -86,6 +90,10 @@ clean:
 	@kubectl delete ns --selector=testid=$(test_id),keep=false
 	@kubectl wait --timeout=60s --for delete namespace --selector=testid=$(test_id),keep=false
 
+# cleanall cleans up all resources related to a test run where keep=true (used
+# for starting a long running network) was specified. Test runs are identified
+# by the current head commit at the piont the test was run, so if you have
+# comitted in the meantime, cleanall will fail.
 .PHONY: cleanall
 cleanall: clean
 	@echo "deleting all namespaces with testid=$(test_id)"

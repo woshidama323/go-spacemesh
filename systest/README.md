@@ -1,7 +1,7 @@
 # Systest
 
 Notes: 
-Make sure you've commited any changes you want to appear in the tests.
+Make sure you've commited any changes you want to appear in the tests before you build the images.
 
 ## Installation
 
