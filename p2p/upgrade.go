@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"path/filepath"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 
-	libpubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/p2p/addressbook"
 	"github.com/spacemeshos/go-spacemesh/p2p/bootstrap"
 	"github.com/spacemeshos/go-spacemesh/p2p/handshake"
 	"github.com/spacemeshos/go-spacemesh/p2p/peerexchange"
-	"github.com/spacemeshos/go-spacemesh/p2p/pubsub"
+	smpubsub "github.com/spacemeshos/go-spacemesh/p2p/pubsub"
 )
 
 // Opt is for configuring Host.
@@ -57,7 +57,7 @@ type Host struct {
 	logger log.Log
 
 	host.Host
-	*pubsub.PubSub
+	*smpubsub.PubSub
 
 	nodeReporter func()
 	*bootstrap.Peers
@@ -97,12 +97,12 @@ func Upgrade(h host.Host, genesisID types.Hash20, opts ...Opt) (*Host, error) {
 		return nil, fmt.Errorf("check node as bootnode: %w", err)
 	}
 
-	jt, err := libpubsub.NewJSONTracer(filepath.Join(cfg.DataDir, "pubsub.trace"))
+	jt, err := pubsub.NewJSONTracer(filepath.Join(cfg.DataDir, "pubsub.trace"))
 	if err != nil {
 		return nil, fmt.Errorf("Failed to construct json tracer: %w", err)
 	}
 
-	if fh.PubSub, err = pubsub.New(fh.ctx, fh.logger, h, pubsub.Config{
+	if fh.PubSub, err = smpubsub.New(fh.ctx, fh.logger, h, smpubsub.Config{
 		Flood:          cfg.Flood,
 		IsBootnode:     bootnode,
 		MaxMessageSize: cfg.MaxMessageSize,

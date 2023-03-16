@@ -162,7 +162,6 @@ func msgID(msg *pb.Message) string {
 }
 
 func getOptions(cfg Config) []pubsub.Option {
-
 	options := []pubsub.Option{
 		// Gossipsubv1.1 configuration
 		pubsub.WithFloodPublish(cfg.Flood),
