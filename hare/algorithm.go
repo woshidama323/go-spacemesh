@@ -502,6 +502,7 @@ func (proc *consensusProcess) handleMessage(ctx context.Context, m *Msg) {
 
 // process the message by its type.
 func (proc *consensusProcess) processMsg(ctx context.Context, m *Msg) {
+	proc.Info("consensus process log has level  %v", proc.Zap().Level())
 	proc.WithContext(ctx).With().Debug("processing message",
 		proc.layer,
 		log.String("msg_type", m.InnerMsg.Type.String()),

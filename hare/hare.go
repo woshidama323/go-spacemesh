@@ -197,6 +197,7 @@ func New(
 		h.nonceFetcher = defaultFetcher{cdb: cdb}
 	}
 
+	h.Info("Creating hare with log level %v", h.Zap().Level())
 	return h
 }
 
