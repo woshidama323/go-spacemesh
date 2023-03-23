@@ -144,70 +144,54 @@ func checkUpdate3(t *testing.T, got *bootstrap.VerifiedUpdate) {
 type checkFunc func(*testing.T, *bootstrap.VerifiedUpdate)
 
 func TestNew(t *testing.T) {
-	tcs := []struct {
-		desc       string
-		resultFunc checkFunc
-		persisted  map[string]string
-	}{
-		{
-			desc: "no recovery",
-		},
-		{
-			desc: "recovery one",
-			persisted: map[string]string{
-				"00001-2023-03-18T22-26-13": update1,
-			},
-			resultFunc: checkUpdate1,
-		},
-		{
-			desc: "recovery latest",
-			persisted: map[string]string{
-				"00014-2023-04-18T22-26-11": update3,
-				"00001-2023-03-18T22-26-13": update1,
-				"00002-2023-04-18T22-26-13": update2,
-			},
-			resultFunc: checkUpdate3,
-		},
-	}
-	for _, tc := range tcs {
-		tc := tc
-		t.Run(tc.desc, func(t *testing.T) {
-			t.Parallel()
+	t.Run("no recovery", func(t *testing.T) { testNew(t, nil, nil) })
 
-			cfg := bootstrap.DefaultConfig()
-			ctrl := gomock.NewController(t)
-			r1 := bootstrap.NewMockReceiver(ctrl)
-			r2 := bootstrap.NewMockReceiver(ctrl)
-			receivers := []bootstrap.Receiver{r1, r2}
-			if len(tc.persisted) > 0 {
-				var received *bootstrap.VerifiedUpdate
-				for _, r := range []*bootstrap.MockReceiver{r1, r2} {
-					r.EXPECT().OnBoostrapUpdate(gomock.Any()).Do(
-						func(got *bootstrap.VerifiedUpdate) {
-							tc.resultFunc(t, got)
-							if received == nil {
-								received = got
-							} else {
-								require.EqualValues(t, received, got)
-							}
-						})
-				}
-			}
-			fs := afero.NewMemMapFs()
-			persistDir := filepath.Join(cfg.DataDir, bootstrap.DirName)
-			for file, update := range tc.persisted {
-				path := filepath.Join(persistDir, file)
-				require.NoError(t, afero.WriteFile(fs, path, []byte(update), 0o400))
-			}
-			_, err := bootstrap.New(
-				receivers,
-				bootstrap.WithConfig(cfg),
-				bootstrap.WithLogger(logtest.New(t)),
-				bootstrap.WithFilesystem(fs),
-			)
-			require.NoError(t, err)
-		})
+	persisted := map[string]string{"00001-2023-03-18T22-26-13": update1}
+	t.Run("recovery one", func(t *testing.T) { testNew(t, persisted, checkUpdate1) })
+
+	persisted = map[string]string{
+		"00014-2023-04-18T22-26-11": update3,
+		"00001-2023-03-18T22-26-13": update1,
+		"00002-2023-04-18T22-26-13": update2,
 	}
+	t.Run("recovery latest", func(t *testing.T) { testNew(t, persisted, checkUpdate3) })
+}
+
+func testNew(t *testing.T, persisted map[string]string, resultFunc checkFunc) {
+	t.Parallel()
+
+	cfg := bootstrap.DefaultConfig()
+	ctrl := gomock.NewController(t)
+	r1 := bootstrap.NewMockReceiver(ctrl)
+	r2 := bootstrap.NewMockReceiver(ctrl)
+	receivers := []bootstrap.Receiver{r1, r2}
+	if len(persisted) > 0 {
+		var received *bootstrap.VerifiedUpdate
+		for _, r := range []*bootstrap.MockReceiver{r1, r2} {
+			r.EXPECT().OnBoostrapUpdate(gomock.Any()).Do(
+				func(got *bootstrap.VerifiedUpdate) {
+					resultFunc(t, got)
+					if received == nil {
+						received = got
+					} else {
+						require.EqualValues(t, received, got)
+					}
+				})
+		}
+	}
+	fs := afero.NewMemMapFs()
+	persistDir := filepath.Join(cfg.DataDir, bootstrap.DirName)
+	for file, update := range persisted {
+		path := filepath.Join(persistDir, file)
+		require.NoError(t, afero.WriteFile(fs, path, []byte(update), 0o400))
+	}
+	_, err := bootstrap.New(
+		receivers,
+		bootstrap.WithConfig(cfg),
+		bootstrap.WithLogger(logtest.New(t)),
+		bootstrap.WithFilesystem(fs),
+	)
+	require.NoError(t, err)
 }
 
 func TestPrune(t *testing.T) {
