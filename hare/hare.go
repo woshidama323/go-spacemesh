@@ -550,6 +550,7 @@ func (h *Hare) tickLoop(ctx context.Context) {
 		ctx := log.WithNewSessionID(ctx)
 		select {
 		case <-h.layerClock.AwaitLayer(layer):
+			h.WithContext(ctx).With().Warning("starting layer", layer)
 			if time.Since(h.layerClock.LayerToTime(layer)) > h.config.WakeupDelta {
 				h.WithContext(ctx).With().Warning("missed hare window, skipping layer", layer)
 				continue
