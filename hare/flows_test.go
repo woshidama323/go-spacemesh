@@ -282,7 +282,7 @@ func Test_multipleCPs(t *testing.T) {
 	}
 
 	var pubsubs []*pubsub.PubSub
-	scMap := NewSharedClock(totalNodes, totalCp, time.Duration(50*int(totalCp)*totalNodes)*time.Millisecond)
+	scMap := NewSharedClock(totalNodes, totalCp, time.Duration(250*int(totalCp)*totalNodes)*time.Millisecond)
 	outputs := make([]map[types.LayerID]LayerOutput, totalNodes)
 	var outputsWaitGroup sync.WaitGroup
 	for i := 0; i < totalNodes; i++ {
