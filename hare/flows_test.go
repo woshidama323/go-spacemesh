@@ -15,7 +15,6 @@ import (
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/hare/config"
 	"github.com/spacemeshos/go-spacemesh/hare/mocks"
-	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/log/logtest"
 	"github.com/spacemeshos/go-spacemesh/p2p/pubsub"
 	"github.com/spacemeshos/go-spacemesh/signing"
@@ -452,6 +451,7 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 		return true
 	}, 5*time.Second, 10*time.Millisecond)
 	layerDuration := 250 * time.Millisecond
+	log := logtest.New(t)
 	go func() {
 		for j := types.GetEffectiveGenesis().Add(1); !j.After(finalLyr); j = j.Add(1) {
 			test.clock.advanceLayer()
