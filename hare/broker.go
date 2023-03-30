@@ -337,6 +337,9 @@ func (b *Broker) Register(ctx context.Context, id types.LayerID) (chan any,
 
 	// check to see if the node is still synced
 	if !b.Synced(ctx, id) {
+		b.WithContext(ctx).With().Warning("not synced at register",
+			log.Stringer("this_layer", id),
+			log.Stringer("prev_layer", b.latestLayer))
 		return nil, errInstanceNotSynced
 	}
 	// Delete old outbox beyond the limit
