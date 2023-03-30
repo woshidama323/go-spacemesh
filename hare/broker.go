@@ -91,6 +91,8 @@ var (
 
 // HandleMessage separate listener routine that receives gossip messages and adds them to the priority queue.
 func (b *Broker) HandleMessage(ctx context.Context, _ p2p.Peer, msg []byte) pubsub.ValidationResult {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	select {
 	case <-ctx.Done():
 		return pubsub.ValidationIgnore
@@ -108,9 +110,9 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 	h := types.CalcMessageHash12(msg, pubsub.HareProtocol)
 
 	// lock over b.latestLayer access
-	b.mu.Lock()
+	// b.mu.Lock()
 	logger := b.WithContext(ctx).WithFields(log.Stringer("latest_layer", b.latestLayer), h)
-	b.mu.Unlock()
+	// b.mu.Unlock()
 
 	hareMsg, err := MessageFromBuffer(msg)
 	if err != nil {
@@ -194,8 +196,8 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 // is early (the message is for the subsequent layer). If the message is not
 // early and an outbox does not exist an error is returned.
 func (b *Broker) getOutbox(logger log.Log, msgLayer types.LayerID) (chan any, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	// b.mu.Lock()
+	// defer b.mu.Unlock()
 	out, exist := b.outbox[msgLayer.Uint32()]
 	if !exist {
 		// If the message is not early then return an error
