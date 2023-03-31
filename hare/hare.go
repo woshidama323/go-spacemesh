@@ -536,6 +536,7 @@ func (h *Hare) outputCollectionLoop(ctx context.Context) {
 			if err := h.collectOutput(ctx, out); err != nil {
 				logger.With().Warning("error collecting output from hare", log.Err(err))
 			}
+			h.Log.Warning("collected output for layer: %v", layerID.Value)
 			h.broker.Unregister(ctx, out.ID())
 			h.removeCP(logger, out.ID())
 		case <-h.ctx.Done():

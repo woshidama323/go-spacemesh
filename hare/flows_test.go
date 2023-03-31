@@ -57,7 +57,7 @@ func (his *HareWrapper) waitForTermination() {
 			break
 		}
 
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	for _, p := range his.hare {
@@ -242,7 +242,7 @@ func Test_multipleCPs(t *testing.T) {
 	finalLyr := types.GetEffectiveGenesis().Add(totalCp)
 	test := newHareWrapper(totalCp)
 	totalNodes := 10
-	networkDelay := time.Second * 4
+	networkDelay := time.Millisecond * 200
 	cfg := config.Config{N: totalNodes, WakeupDelta: networkDelay, RoundDuration: networkDelay, ExpectedLeaders: 5, LimitIterations: 1000, LimitConcurrent: 100, Hdist: 20}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -282,7 +282,7 @@ func Test_multipleCPs(t *testing.T) {
 	}
 
 	var pubsubs []*pubsub.PubSub
-	scMap := NewSharedClock(totalNodes, totalCp, time.Duration(250*int(totalCp)*totalNodes)*time.Millisecond)
+	scMap := NewSharedClock(totalNodes, totalCp, 10*time.Millisecond)
 	outputs := make([]map[types.LayerID]LayerOutput, totalNodes)
 	var outputsWaitGroup sync.WaitGroup
 	for i := 0; i < totalNodes; i++ {
@@ -328,18 +328,15 @@ func Test_multipleCPs(t *testing.T) {
 		}
 		return true
 	}, 5*time.Second, 10*time.Millisecond)
-	layerDuration := 250 * time.Millisecond
 	log := logtest.New(t)
-	go func() {
-		for j := types.GetEffectiveGenesis().Add(1); !j.After(finalLyr); j = j.Add(1) {
-			test.clock.advanceLayer()
-			log.Warning("advancing to layer %d", j.Uint32())
-			time.Sleep(layerDuration)
-		}
-	}()
+	for j := types.GetEffectiveGenesis().Add(1); !j.After(finalLyr); j = j.Add(1) {
+		test.clock.advanceLayer()
+		time.Sleep(10 * time.Millisecond)
+		log.Warning("advancing to layer %d", j.Uint32())
+	}
 
 	// There are 5 rounds per layer and totalCPs layers and we double for good measure.
-	test.WaitForTimedTermination(t, 2*networkDelay*5*time.Duration(totalCp))
+	test.WaitForTimedTermination(t, time.Minute)
 	for _, h := range test.hare {
 		close(h.blockGenCh)
 	}
@@ -368,7 +365,7 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 	finalLyr := types.GetEffectiveGenesis().Add(totalCp)
 	test := newHareWrapper(totalCp)
 	totalNodes := 10
-	networkDelay := time.Second * 4
+	networkDelay := time.Millisecond * 50
 	cfg := config.Config{N: totalNodes, WakeupDelta: networkDelay, RoundDuration: networkDelay, ExpectedLeaders: 5, LimitIterations: 1000, LimitConcurrent: 100, Hdist: 20}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -466,7 +463,7 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 	// There are 5 rounds per layer and totalCPs layers and we double to allow
 	// for the for good measure. Also one layer in this test will run 2
 	// iterations so we increase the layer count by 1.
-	test.WaitForTimedTermination(t, 2*networkDelay*5*time.Duration(totalCp+1))
+	test.WaitForTimedTermination(t, time.Minute)
 	for _, h := range test.hare {
 		close(h.blockGenCh)
 	}
