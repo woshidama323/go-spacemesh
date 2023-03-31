@@ -328,9 +328,11 @@ func Test_multipleCPs(t *testing.T) {
 		return true
 	}, 5*time.Second, 10*time.Millisecond)
 	layerDuration := 250 * time.Millisecond
+	log := logtest.New(t)
 	go func() {
 		for j := types.GetEffectiveGenesis().Add(1); !j.After(finalLyr); j = j.Add(1) {
 			test.clock.advanceLayer()
+			log.Warning("advancing to layer %d", j.Uint32())
 			time.Sleep(layerDuration)
 		}
 	}()
