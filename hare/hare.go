@@ -556,6 +556,7 @@ func (h *Hare) tickLoop(ctx context.Context) {
 				continue
 			}
 			_, _ = h.onTick(ctx, layer)
+			h.WithContext(ctx).With().Warning("finished on tick", layer)
 		case <-h.ctx.Done():
 			return
 		}
