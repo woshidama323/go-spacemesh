@@ -292,6 +292,7 @@ func Test_multipleCPs(t *testing.T) {
 		src := NewSimRoundClock(ps, scMap)
 		pubsubs = append(pubsubs, ps)
 		h := createTestHare(t, meshes[i], cfg, test.clock, src, t.Name())
+		h.newRoundClock = src.NewRoundClock
 		h.mockRoracle.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 		h.mockRoracle.EXPECT().Proof(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(make([]byte, 80), nil).AnyTimes()
 		h.mockRoracle.EXPECT().CalcEligibility(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(uint16(1), nil).AnyTimes()
