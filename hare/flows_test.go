@@ -243,8 +243,11 @@ func Test_multipleCPs(t *testing.T) {
 	finalLyr := types.GetEffectiveGenesis().Add(totalCp)
 	test := newHareWrapper(totalCp)
 	totalNodes := 10
-	networkDelay := time.Millisecond * 200
-	cfg := config.Config{N: totalNodes, WakeupDelta: networkDelay, RoundDuration: networkDelay, ExpectedLeaders: 5, LimitIterations: 1000, LimitConcurrent: 100, Hdist: 20}
+	// RoundDuration is not used because we override the newRoundClock
+	// function, wakeupDelta controls whether a consensus process will skip a
+	// layer, if the layer tick arrives after wakeup delta then the process
+	// skips the layer.
+	cfg := config.Config{N: totalNodes, WakeupDelta: 2 * time.Second, RoundDuration: 0, ExpectedLeaders: 5, LimitIterations: 1000, LimitConcurrent: 100, Hdist: 20}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -366,8 +369,11 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 	finalLyr := types.GetEffectiveGenesis().Add(totalCp)
 	test := newHareWrapper(totalCp)
 	totalNodes := 10
-	networkDelay := time.Millisecond * 50
-	cfg := config.Config{N: totalNodes, WakeupDelta: networkDelay, RoundDuration: networkDelay, ExpectedLeaders: 5, LimitIterations: 1000, LimitConcurrent: 100, Hdist: 20}
+	// RoundDuration is not used because we override the newRoundClock
+	// function, wakeupDelta controls whether a consensus process will skip a
+	// layer, if the layer tick arrives after wakeup delta then the process
+	// skips the layer.
+	cfg := config.Config{N: totalNodes, WakeupDelta: 5 * time.Second, RoundDuration: 0, ExpectedLeaders: 5, LimitIterations: 1000, LimitConcurrent: 100, Hdist: 20}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -483,13 +489,12 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 }
 
 type SharedRoundClock struct {
-	currentRound     uint32
-	rounds           map[uint32]chan struct{}
-	minCount         int
-	processingDelay  time.Duration
-	sentMessages     uint16
-	advanceScheduled bool
-	m                sync.Mutex
+	currentRound    uint32
+	rounds          map[uint32]chan struct{}
+	minCount        int
+	processingDelay time.Duration
+	sentMessages    uint16
+	m               sync.Mutex
 }
 
 func NewSharedClock(minCount int, totalCP uint32, processingDelay time.Duration) map[types.LayerID]*SharedRoundClock {
@@ -535,16 +540,9 @@ func (c *SharedRoundClock) IncMessages(cnt uint16) {
 	defer c.m.Unlock()
 
 	c.sentMessages += cnt
-	if int(c.sentMessages) >= c.minCount && !c.advanceScheduled {
-		time.AfterFunc(c.processingDelay, func() {
-			c.m.Lock()
-			defer c.m.Unlock()
-
-			c.sentMessages = 0
-			c.advanceScheduled = false
-			c.advanceRound()
-		})
-		c.advanceScheduled = true
+	if int(c.sentMessages) >= c.minCount {
+		c.sentMessages = 0
+		c.advanceRound()
 	}
 }
 
