@@ -493,7 +493,7 @@ type SharedRoundClock struct {
 	rounds          map[uint32]chan struct{}
 	minCount        int
 	processingDelay time.Duration
-	sentMessages    uint16
+	sentMessages    int
 	m               sync.Mutex
 }
 
@@ -535,14 +535,22 @@ func (c *SharedRoundClock) RoundEnd(round uint32) time.Time {
 	return time.Now()
 }
 
-func (c *SharedRoundClock) IncMessages(cnt uint16) {
+func (c *SharedRoundClock) IncMessages(cnt int) {
 	c.m.Lock()
 	defer c.m.Unlock()
 
 	c.sentMessages += cnt
-	if int(c.sentMessages) >= c.minCount {
-		c.sentMessages = 0
-		c.advanceRound()
+	if c.sentMessages > c.minCount {
+		panic("violation")
+	}
+	if c.sentMessages == c.minCount {
+		time.AfterFunc(c.processingDelay, func() {
+			c.m.Lock()
+			defer c.m.Unlock()
+
+			c.sentMessages = 0
+			c.advanceRound()
+		})
 	}
 }
 
@@ -567,7 +575,7 @@ func (c *SimRoundClock) Register(protocol string, handler pubsub.GossipHandler) 
 			res := handler(ctx, id, msg)
 			c.m.Lock()
 			clock := c.clocks[instanceID]
-			clock.IncMessages(cnt)
+			clock.IncMessages(int(cnt))
 			c.m.Unlock()
 			return res
 		},
