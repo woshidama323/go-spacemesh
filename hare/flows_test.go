@@ -296,20 +296,16 @@ func Test_multipleCPs(t *testing.T) {
 		pubsubs = append(pubsubs, ps)
 		h := createTestHare(t, meshes[i], cfg, test.clock, src, t.Name())
 		h.newRoundClock = src.NewRoundClock
-
-		// Hook into  the consensus factory to be able to track accepted messages.
 		factory := h.factory
 		h.factory = func(ctx context.Context, conf config.Config, instanceId types.LayerID, s *Set, oracle Rolacle, signing *signing.EdSigner, nonce *types.VRFPostIndex, p2p pubsub.Publisher, comm communication, clock RoundClock) Consensus {
-			println("factory called")
-			cp := factory(ctx, conf, instanceId, s, oracle, signing, nonce, p2p, comm, clock).(*consensusProcess)
-			tracker := cp.mTracker
-			cp.mTracker = &notifyingMsgsTracker{
-				msgsTracker: tracker,
+			println("making a consensus process")
+			cp := factory(ctx, conf, instanceId, s, oracle, signing, nonce, p2p, comm, clock)
+			return &notifyingConsensusProcess{
+				consensusProcess: cp.(*consensusProcess),
 				notify: func(m *Msg) {
 					clock.(*SharedRoundClock).IncMessages(int(m.Eligibility.Count))
 				},
 			}
-			return cp
 		}
 
 		h.mockRoracle.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
@@ -620,15 +616,15 @@ func NewSimRoundClock(s pubsub.PublishSubsciber, clocks map[types.LayerID]*Share
 	}
 }
 
-// notifyingMsgsTracker provides a way to hook into the consensus process
+// notifyingConsensusProcess provides a way to hook into the consensus process
 // and be notified of message processing.
-type notifyingMsgsTracker struct {
-	msgsTracker
+type notifyingConsensusProcess struct {
+	*consensusProcess
 	notify func(m *Msg)
 }
 
-func (t *notifyingMsgsTracker) Track(m *Msg) {
-	println("tracking")
-	t.msgsTracker.Track(m)
-	t.notify(m)
-}
+// func (p *notifyingConsensusProcess) processMsg(ctx context.Context, m *Msg) {
+// 	println("dowing the processmsg")
+// 	p.consensusProcess.processMsg(ctx, m)
+// 	p.notify(m)
+// }
