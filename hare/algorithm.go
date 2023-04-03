@@ -209,7 +209,7 @@ type consensusProcess struct {
 	notifyTracker    *notifyTracker
 	cfg              config.Config
 	pending          map[types.NodeID]*Msg // buffer for early messages that are pending process
-	mTracker         *msgsTracker          // tracks valid messages
+	mTracker         msgsTracker           // tracks valid messages
 	eTracker         *EligibilityTracker   // tracks eligible identities by rounds
 	eligibilityCount uint16
 	clock            RoundClock

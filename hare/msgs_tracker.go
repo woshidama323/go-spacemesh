@@ -4,18 +4,23 @@ import (
 	"github.com/spacemeshos/go-spacemesh/common/types"
 )
 
-type msgsTracker struct {
+type msgsTracker interface {
+	Track(*Msg)
+	NodeID(*Message) types.NodeID
+}
+
+type defaultMsgsTracker struct {
 	sigToPub map[types.EdSignature]types.NodeID
 }
 
-func (mt *msgsTracker) Track(m *Msg) {
+func (mt *defaultMsgsTracker) Track(m *Msg) {
 	mt.sigToPub[m.Signature] = m.NodeID
 }
 
-func (mt *msgsTracker) NodeID(m *Message) types.NodeID {
+func (mt *defaultMsgsTracker) NodeID(m *Message) types.NodeID {
 	return mt.sigToPub[m.Signature]
 }
 
-func newMsgsTracker() *msgsTracker {
-	return &msgsTracker{sigToPub: make(map[types.EdSignature]types.NodeID)}
+func newMsgsTracker() *defaultMsgsTracker {
+	return &defaultMsgsTracker{sigToPub: make(map[types.EdSignature]types.NodeID)}
 }
