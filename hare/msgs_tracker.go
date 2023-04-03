@@ -14,6 +14,7 @@ type defaultMsgsTracker struct {
 }
 
 func (mt *defaultMsgsTracker) Track(m *Msg) {
+	println("real track")
 	mt.sigToPub[m.Signature] = m.NodeID
 }
 
