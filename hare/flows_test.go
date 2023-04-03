@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/libp2p/go-libp2p/core/peer"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/require"
 
@@ -297,6 +296,18 @@ func Test_multipleCPs(t *testing.T) {
 		pubsubs = append(pubsubs, ps)
 		h := createTestHare(t, meshes[i], cfg, test.clock, src, t.Name())
 		h.newRoundClock = src.NewRoundClock
+		factory := h.factory
+		h.factory = func(ctx context.Context, conf config.Config, instanceId types.LayerID, s *Set, oracle Rolacle, signing *signing.EdSigner, nonce *types.VRFPostIndex, p2p pubsub.Publisher, comm communication, clock RoundClock) Consensus {
+			println("making a consensus process")
+			cp := factory(ctx, conf, instanceId, s, oracle, signing, nonce, p2p, comm, clock)
+			return &notifyingConsensusProcess{
+				consensusProcess: cp.(*consensusProcess),
+				notify: func(m *Msg) {
+					clock.(*SharedRoundClock).IncMessages(int(m.Eligibility.Count))
+				},
+			}
+		}
+
 		h.mockRoracle.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
 		h.mockRoracle.EXPECT().Proof(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(make([]byte, 80), nil).AnyTimes()
 		h.mockRoracle.EXPECT().CalcEligibility(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(uint16(1), nil).AnyTimes()
@@ -540,6 +551,7 @@ func (c *SharedRoundClock) IncMessages(cnt int) {
 	defer c.m.Unlock()
 
 	c.sentMessages += cnt
+	println("got", c.sentMessages, "messages")
 	if c.sentMessages > c.minCount {
 		panic("violation")
 	}
@@ -563,36 +575,35 @@ func (c *SharedRoundClock) advanceRound() {
 
 type SimRoundClock struct {
 	clocks map[types.LayerID]*SharedRoundClock
-	m      sync.Mutex
-	s      pubsub.PublishSubsciber
+	pubsub.PublishSubsciber
 }
 
-func (c *SimRoundClock) Register(protocol string, handler pubsub.GossipHandler) {
-	c.s.Register(
-		protocol,
-		func(ctx context.Context, id peer.ID, msg []byte) pubsub.ValidationResult {
-			instanceID, cnt := extractInstanceID(msg)
-			res := handler(ctx, id, msg)
-			c.m.Lock()
-			clock := c.clocks[instanceID]
-			clock.IncMessages(int(cnt))
-			c.m.Unlock()
-			return res
-		},
-	)
-}
+// func (c *SimRoundClock) Register(protocol string, handler pubsub.GossipHandler) {
+// 	c.s.Register(
+// 		protocol,
+// 		func(ctx context.Context, id peer.ID, msg []byte) pubsub.ValidationResult {
+// 			instanceID, cnt := extractInstanceID(msg)
+// 			res := handler(ctx, id, msg)
+// 			c.m.Lock()
+// 			clock := c.clocks[instanceID]
+// 			clock.IncMessages(int(cnt))
+// 			c.m.Unlock()
+// 			return res
+// 		},
+// 	)
+// }
 
-func (c *SimRoundClock) Publish(ctx context.Context, protocol string, payload []byte) error {
-	return c.s.Publish(ctx, protocol, payload)
-}
+// func (c *SimRoundClock) Publish(ctx context.Context, protocol string, payload []byte) error {
+// 	return c.s.Publish(ctx, protocol, payload)
+// }
 
-func extractInstanceID(payload []byte) (types.LayerID, uint16) {
-	m, err := MessageFromBuffer(payload)
-	if err != nil {
-		panic(err)
-	}
-	return m.Layer, m.Eligibility.Count
-}
+// func extractInstanceID(payload []byte) (types.LayerID, uint16) {
+// 	m, err := MessageFromBuffer(payload)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return m.Layer, m.Eligibility.Count
+// }
 
 func (c *SimRoundClock) NewRoundClock(layerID types.LayerID) RoundClock {
 	return c.clocks[layerID]
@@ -600,7 +611,20 @@ func (c *SimRoundClock) NewRoundClock(layerID types.LayerID) RoundClock {
 
 func NewSimRoundClock(s pubsub.PublishSubsciber, clocks map[types.LayerID]*SharedRoundClock) *SimRoundClock {
 	return &SimRoundClock{
-		clocks: clocks,
-		s:      s,
+		clocks:           clocks,
+		PublishSubsciber: s,
 	}
 }
+
+// notifyingConsensusProcess provides a way to hook into the consensus process
+// and be notified of message processing.
+type notifyingConsensusProcess struct {
+	*consensusProcess
+	notify func(m *Msg)
+}
+
+// func (p *notifyingConsensusProcess) processMsg(ctx context.Context, m *Msg) {
+// 	println("dowing the processmsg")
+// 	p.consensusProcess.processMsg(ctx, m)
+// 	p.notify(m)
+// }
