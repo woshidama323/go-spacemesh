@@ -889,11 +889,16 @@ func (proc *consensusProcess) statusValidator() func(m *Msg) bool {
 		if m.InnerMsg.CommittedRound == preRound { // no certificates, validate by pre-round msgs
 			if proc.preRoundTracker.CanProveSet(s) { // can prove s
 				return true
+			} else {
+				proc.Log.Warning("pre round tracker cannot prove set round %v layer %v", m.Round, m.Layer.Value)
 			}
 		} else if proc.notifyTracker.HasCertificate(m.InnerMsg.CommittedRound, s) { // can prove s
 			// if CommittedRound (Ki) >= 0, we should have received a certificate for that set
 			return true
+		} else {
+			proc.Log.Warning("notify tracker has no certificate for inner message committed round %v round %v layer %v", m.InnerMsg.CommittedRound, m.Round, m.Layer.Value)
 		}
+
 		return false
 	}
 

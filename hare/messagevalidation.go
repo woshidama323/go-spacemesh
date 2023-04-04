@@ -472,7 +472,10 @@ func validateCommitType(m *Msg) bool {
 }
 
 func validateStatusType(m *Msg) bool {
-	return m.InnerMsg.Type == status
+	if m.InnerMsg.Type != status {
+		log.Warning("inner message type is not status", m.InnerMsg.Type.String())
+	}
+	return m.InnerMsg.Type != status
 }
 
 // validate SVP for type A (where all Ki=-1).
