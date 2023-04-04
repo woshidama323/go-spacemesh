@@ -3,7 +3,6 @@ package hare
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -18,236 +17,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/hare/mocks"
 	"github.com/spacemeshos/go-spacemesh/log/logtest"
 	"github.com/spacemeshos/go-spacemesh/p2p/pubsub"
-	"github.com/spacemeshos/go-spacemesh/signing"
-	smocks "github.com/spacemeshos/go-spacemesh/system/mocks"
 )
-
-type HareWrapper struct {
-	totalCP     uint32
-	termination chan struct{}
-	clock       *mockClock
-	hare        []*Hare
-	//lint:ignore U1000 pending https://github.com/spacemeshos/go-spacemesh/issues/4001
-	initialSets []*Set
-	outputs     map[types.LayerID][]*Set
-}
-
-func newHareWrapper(totalCp uint32) *HareWrapper {
-	hs := new(HareWrapper)
-	hs.clock = newMockClock()
-	hs.totalCP = totalCp
-	hs.termination = make(chan struct{})
-	hs.outputs = make(map[types.LayerID][]*Set, 0)
-
-	return hs
-}
-
-func (his *HareWrapper) waitForTermination() {
-	for {
-		count := 0
-		for _, p := range his.hare {
-			for i := types.GetEffectiveGenesis().Add(1); !i.After(types.GetEffectiveGenesis().Add(his.totalCP)); i = i.Add(1) {
-				proposalIDs, _ := p.getResult(i)
-				if len(proposalIDs) > 0 {
-					count++
-				}
-			}
-		}
-
-		if count == int(his.totalCP)*len(his.hare) {
-			break
-		}
-
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	for _, p := range his.hare {
-		for i := types.GetEffectiveGenesis().Add(1); !i.After(types.GetEffectiveGenesis().Add(his.totalCP)); i = i.Add(1) {
-			s := NewEmptySet(10)
-			proposalIDs, _ := p.getResult(i)
-			for _, p := range proposalIDs {
-				s.Add(p)
-			}
-			his.outputs[i] = append(his.outputs[i], s)
-		}
-	}
-
-	close(his.termination)
-}
-
-func (his *HareWrapper) WaitForTimedTermination(t *testing.T, timeout time.Duration) {
-	timer := time.After(timeout)
-	go his.waitForTermination()
-	total := types.NewLayerID(his.totalCP)
-	select {
-	case <-timer:
-		t.Fatal("Timeout")
-		return
-	case <-his.termination:
-		for i := types.NewLayerID(1); !i.After(total); i = i.Add(1) {
-			his.checkResult(t, i)
-		}
-		return
-	}
-}
-
-func (his *HareWrapper) checkResult(t *testing.T, id types.LayerID) {
-	// check consistency
-	out := his.outputs[id]
-	for i := 0; i < len(out)-1; i++ {
-		if !out[i].Equals(out[i+1]) {
-			t.Errorf("Consistency check failed: Expected: %v Actual: %v", out[i], out[i+1])
-		}
-	}
-}
-
-type p2pManipulator struct {
-	pubsub.PublishSubsciber
-	stalledLayer types.LayerID
-	err          error
-}
-
-// func (m *p2pManipulator) Register(protocol string, handler pubsub.GossipHandler) {
-// 	m.PublishSubsciber.Register(
-// 		protocol,
-// 		func(ctx context.Context, id peer.ID, message []byte) pubsub.ValidationResult {
-// 			msg, _ := MessageFromBuffer(message)
-// 			println("msg.Round", msg.Round, "in layer", msg.Layer.Value)
-// 			// drop messages for given layer and rounds
-// 			if msg.Layer == m.stalledLayer && msg.Round < 8 && msg.Round !=
-// 				preRound {
-// 				// We need to return ValidationAccept here because Publish
-// 				// calls the handler and if we don't return ValidationAccept
-// 				// then the message will not be published to the network.
-// 				return pubsub.ValidationAccept
-// 			}
-// 			return handler(ctx, id, message)
-// 		},
-// 	)
-// }
-
-func (m *p2pManipulator) Publish(ctx context.Context, protocol string, payload []byte) error {
-	msg, _ := MessageFromBuffer(payload)
-	if msg.Layer == m.stalledLayer && msg.Round < 8 && msg.Round != preRound {
-		return m.err
-	}
-
-	if err := m.PublishSubsciber.Publish(ctx, protocol, payload); err != nil {
-		return fmt.Errorf("broadcast: %w", err)
-	}
-
-	return nil
-}
-
-type hareWithMocks struct {
-	*Hare
-	mockRoracle *mocks.MockRolacle
-}
-
-func createTestHare(tb testing.TB, msh mesh, tcfg config.Config, clock *mockClock, p2p pubsub.PublishSubsciber, name string) *hareWithMocks {
-	tb.Helper()
-	signer, err := signing.NewEdSigner()
-	require.NoError(tb, err)
-	pub := signer.PublicKey()
-	nodeID := types.BytesToNodeID(pub.Bytes())
-	pke, err := signing.NewPubKeyExtractor()
-	require.NoError(tb, err)
-
-	ctrl := gomock.NewController(tb)
-	patrol := mocks.NewMocklayerPatrol(ctrl)
-	patrol.EXPECT().SetHareInCharge(gomock.Any()).AnyTimes()
-	mockBeacons := smocks.NewMockBeaconGetter(ctrl)
-	mockBeacons.EXPECT().GetBeacon(gomock.Any()).Return(types.EmptyBeacon, nil).AnyTimes()
-	mockStateQ := mocks.NewMockstateQuerier(ctrl)
-	mockStateQ.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
-	mockSyncS := smocks.NewMockSyncStateProvider(ctrl)
-	mockSyncS.EXPECT().IsSynced(gomock.Any()).Return(true).AnyTimes()
-	mockSyncS.EXPECT().IsBeaconSynced(gomock.Any()).Return(true).AnyTimes()
-
-	mockRoracle := mocks.NewMockRolacle(ctrl)
-
-	hare := New(
-		nil,
-		tcfg,
-		p2p,
-		signer,
-		pke,
-		nodeID,
-		make(chan LayerOutput, 100),
-		mockSyncS,
-		mockBeacons,
-		mockRoracle,
-		patrol,
-		mockStateQ,
-		clock,
-		logtest.New(tb).WithName(name+"_"+signer.PublicKey().ShortString()),
-		withMesh(msh),
-	)
-	p2p.Register(pubsub.HareProtocol, hare.GetHareMsgHandler())
-
-	return &hareWithMocks{
-		Hare:        hare,
-		mockRoracle: mockRoracle,
-	}
-}
-
-type mockClock struct {
-	channels     map[types.LayerID]chan struct{}
-	layerTime    map[types.LayerID]time.Time
-	currentLayer types.LayerID
-	m            sync.RWMutex
-}
-
-func newMockClock() *mockClock {
-	return &mockClock{
-		channels:     make(map[types.LayerID]chan struct{}),
-		layerTime:    map[types.LayerID]time.Time{types.GetEffectiveGenesis(): time.Now()},
-		currentLayer: types.GetEffectiveGenesis().Add(1),
-	}
-}
-
-func (m *mockClock) LayerToTime(layer types.LayerID) time.Time {
-	m.m.RLock()
-	defer m.m.RUnlock()
-
-	return m.layerTime[layer]
-}
-
-func (m *mockClock) AwaitLayer(layer types.LayerID) chan struct{} {
-	m.m.Lock()
-	defer m.m.Unlock()
-
-	if _, ok := m.layerTime[layer]; ok {
-		ch := make(chan struct{})
-		close(ch)
-		return ch
-	}
-	if ch, ok := m.channels[layer]; ok {
-		return ch
-	}
-	ch := make(chan struct{})
-	m.channels[layer] = ch
-	return ch
-}
-
-func (m *mockClock) CurrentLayer() types.LayerID {
-	m.m.RLock()
-	defer m.m.RUnlock()
-
-	return m.currentLayer
-}
-
-func (m *mockClock) advanceLayer() {
-	m.m.Lock()
-	defer m.m.Unlock()
-
-	m.layerTime[m.currentLayer] = time.Now()
-	if ch, ok := m.channels[m.currentLayer]; ok {
-		close(ch)
-		delete(m.channels, m.currentLayer)
-	}
-	m.currentLayer = m.currentLayer.Add(1)
-}
 
 // Test - run multiple CPs simultaneously.
 func Test_multipleCPs(t *testing.T) {
@@ -313,10 +83,15 @@ func Test_multipleCPs(t *testing.T) {
 		// We wrap the pubsub system to notify round clocks whenever a message
 		// is received.
 		testPs := &testPublisherSubscriber{
-			PublishSubsciber: ps,
-			notify: func(msg []byte) {
-				layer, eligibilityCount := extractInstanceID(msg)
-				roundClocks.clock(layer).IncMessages(int(eligibilityCount), 0)
+			inner: ps,
+			register: func(protocol string, handler pubsub.GossipHandler) {
+				ps.Register(protocol, func(ctx context.Context, peer peer.ID, message []byte) pubsub.ValidationResult {
+					res := handler(ctx, peer, message)
+					// Update the round clock
+					layer, eligibilityCount := extractInstanceID(message)
+					roundClocks.clock(layer).incMessages(int(eligibilityCount), 0)
+					return res
+				})
 			},
 		}
 		h := createTestHare(t, meshes[i], cfg, test.clock, testPs, t.Name())
@@ -437,13 +212,12 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 
 	// setup roundClocks to progress a layer only when all nodes have received messages from all nodes.
 	roundClocks := newSharedRoundClocks(totalNodes*totalNodes, 50*time.Millisecond)
-	stalledLayer := types.GetEffectiveGenesis().Add(1)
 
 	// The stalled layer drops messages from rounds 0-7 so to ensure that those
 	// rounds progress without requiring notification via
 	// testPublisherSubscriber we "pre close" the rounds by providing a closed
 	// channel.
-	roundClocks.roundClock(stalledLayer)
+	// roundClocks.roundClock(stalledLayer)
 	// stalledLayerRoundClock := roundClocks.clock(stalledLayer)
 	// closedChan := make(chan struct{})
 	// close(closedChan)
@@ -458,51 +232,115 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 	var outputsWaitGroup sync.WaitGroup
 	var layer8Count int
 	var notifyMutex sync.Mutex
+	var targetLayerWg sync.WaitGroup
+	targetLayerWg.Add(totalNodes)
+	stalledLayer := types.GetEffectiveGenesis().Add(1)
+	maxStalledRound := 7
 	for i := 0; i < totalNodes; i++ {
 		host := mesh.Hosts()[i]
 		ps, err := pubsub.New(ctx, logtest.New(t), host, pubsub.DefaultConfig())
 		require.NoError(t, err)
 
-		// We wrap the pubsub system to notify round clocks whenever a message
-		// is received.
 		testPs := &testPublisherSubscriber{
-			PublishSubsciber: ps,
+			inner: ps,
+			publish: func(ctx context.Context, topic string, message []byte) error {
+				// drop messages from rounds 0 - 7 for stalled layer but not for preRound.
+				msg, _ := MessageFromBuffer(message)
+				if msg.Layer == stalledLayer && int(msg.Round) <= maxStalledRound && msg.Round != preRound {
+					return errors.New("fake error")
+				}
+				// We need to wait before publishing for the unstalled rounds
+				// to make sure all nodes have reached the unstalled round
+				// otherwise nodes that are still working through the stalled
+				// rounds may interpret the message as contextually invalid.
+				if msg.Layer == stalledLayer && int(msg.Round) == maxStalledRound+1 {
+					targetLayerWg.Done()
+					targetLayerWg.Wait()
+				}
+				return ps.Publish(ctx, topic, message)
+			},
+			register: func(topic string, handler pubsub.GossipHandler) {
+				// Register a wrapped handler with the real pubsub
+				ps.Register(topic, func(ctx context.Context, peer peer.ID, message []byte) pubsub.ValidationResult {
+					// Call the handler
+					res := handler(ctx, peer, message)
+
+					// Now we will ensure the round clock is progressed properly.
+					notifyMutex.Lock()
+					defer notifyMutex.Unlock()
+					m, err := MessageFromBuffer(message)
+					if err != nil {
+						panic(err)
+					}
+
+					// Incremente message count.
+					roundClocks.clock(m.Layer).incMessages(int(m.Eligibility.Count), m.Round)
+
+					// The stalled layer blocks messages from being published,
+					// so after the preRound we need a different mechanism to
+					// progress the rounds, because we will not be receiving
+					// messages and therefore we will not be making calls to
+					// incMessages.
+					if m.Layer == stalledLayer && m.Round == preRound {
+						// Keep track of received preRound messages
+						layer8Count += int(m.Eligibility.Count)
+						if layer8Count == totalNodes*totalNodes {
+							// Once all preRound messages have been received wait for the preRound to complete.
+							<-roundClocks.clock(m.Layer).AwaitEndOfRound(preRound)
+							println("status round completed")
+							// time.Sleep(time.Second)
+							// Manually progress rounds to the round following the maxStalledRound.
+							roundClocks.clock(m.Layer).advanceToRound(uint32(maxStalledRound + 1))
+							// roundClocks.clock(m.Layer).m.Lock()
+							// defer roundClocks.clock(m.Layer).m.Unlock()
+							// for r := 0; r < 8; r++ {
+							// 	println("aaaaaaaaaaaaaaaaaaaaaaaaaaaaadd")
+							// 	// roundClocks.clock(m.Layer).AwaitEndOfRound(uint32(r))
+							// 	time.Sleep(time.Millisecond * 200)
+							// 	roundClocks.clock(m.Layer).advanceRound()
+							// }
+						}
+					}
+					return res
+				})
+			},
+
 			// notify: func(msg []byte) {
 			// 	layer, eligibilityCount := extractInstanceID(msg)
 			// 	roundClocks.clock(layer).IncMessages(int(eligibilityCount))
 			// },
-			notify: func(msg []byte) {
-				notifyMutex.Lock()
-				defer notifyMutex.Unlock()
-				m, err := MessageFromBuffer(msg)
-				if err != nil {
-					panic(err)
-				}
+			// notify: func(msg []byte) {
+			// 	notifyMutex.Lock()
+			// 	defer notifyMutex.Unlock()
+			// 	m, err := MessageFromBuffer(msg)
+			// 	if err != nil {
+			// 		panic(err)
+			// 	}
 
-				roundClocks.clock(m.Layer).IncMessages(int(m.Eligibility.Count), m.Round)
-				// Keep track of progress in the stalled layer
-				if m.Layer == stalledLayer && m.Round == preRound {
-					// println("layer8adding", m.Eligibility.Count)
-					layer8Count += int(m.Eligibility.Count)
-					// println("layer8count", layer8Count)
-					if layer8Count == totalNodes*totalNodes {
-						// Gotta sleep to make sure that advance round is called first by the round clock
-						// time.Sleep(4 * roundClocks.processingDelay)
-						<-roundClocks.clock(m.Layer).AwaitEndOfRound(preRound)
-						println("status round completed")
-						// time.Sleep(time.Second)
-						roundClocks.clock(m.Layer).advanceToRound(8)
-						// roundClocks.clock(m.Layer).m.Lock()
-						// defer roundClocks.clock(m.Layer).m.Unlock()
-						// for r := 0; r < 8; r++ {
-						// 	println("aaaaaaaaaaaaaaaaaaaaaaaaaaaaadd")
-						// 	// roundClocks.clock(m.Layer).AwaitEndOfRound(uint32(r))
-						// 	time.Sleep(time.Millisecond * 200)
-						// 	roundClocks.clock(m.Layer).advanceRound()
-						// }
-					}
-				}
-			},
+			// 	roundClocks.clock(m.Layer).incMessages(int(m.Eligibility.Count), m.Round)
+			// 	// Keep track of progress in the stalled layer
+			// 	if m.Layer == stalledLayer && m.Round == preRound {
+			// 		// println("layer8adding", m.Eligibility.Count)
+			// 		layer8Count += int(m.Eligibility.Count)
+			// 		// println("layer8count", layer8Count)
+			// 		if layer8Count == totalNodes*totalNodes {
+			// 			// Gotta sleep to make sure that advance round is called first by the round clock
+			// 			// time.Sleep(4 * roundClocks.processingDelay)
+			// 			<-roundClocks.clock(m.Layer).AwaitEndOfRound(preRound)
+			// 			println("status round completed")
+			// 			// time.Sleep(time.Second)
+			// 			roundClocks.clock(m.Layer).advanceToRound(8)
+			// 			// roundClocks.clock(m.Layer).m.Lock()
+			// 			// defer roundClocks.clock(m.Layer).m.Unlock()
+			// 			// for r := 0; r < 8; r++ {
+			// 			// 	println("aaaaaaaaaaaaaaaaaaaaaaaaaaaaadd")
+			// 			// 	// roundClocks.clock(m.Layer).AwaitEndOfRound(uint32(r))
+			// 			// 	time.Sleep(time.Millisecond * 200)
+			// 			// 	roundClocks.clock(m.Layer).advanceRound()
+			// 			// }
+			// 		}
+			// 	}
+			// },
 		}
 		// the manipulatior drops meessages for the given layer on the first iteration this will result in a second iteration s
 		mp2p := &p2pManipulator{PublishSubsciber: testPs, stalledLayer: stalledLayer, err: errors.New("fake err")}
@@ -573,178 +411,4 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 			h.Close()
 		}
 	})
-}
-
-// The SharedRoundClock acts as a synchronization mechanism to allow for rounds
-// to progress only when some threshold of messages have been received. This
-// allows for reliable tests because it removes the possibility of tests
-// failing due to late arrival of messages. It also allows for fast tests
-// because as soon as the required number of messages have been received the
-// next round is started, this avoids any downtime that may have occurred in
-// situations where we set a fixed round time. However there is a caveat,
-// because this is hooking into the PubSub system there is still a delay
-// between messages being delivered and hare actually processing those
-// messages, that delay is accounted for by the processingDelay field. Setting
-// this too low will result in tests failing due to late message delivery,
-// increasing the value does however increase overall test time, so we don't
-// want this to be huge. A better solution would be to extract message
-// processing from consensus processes so that we could hook into actual
-// message delivery to Hare, see - https://github.com/spacemeshos/go-spacemesh/issues/4248.
-type SharedRoundClock struct {
-	currentRound    uint32
-	rounds          map[uint32]chan struct{}
-	minCount        int
-	processingDelay time.Duration
-	messageCount    int
-	m               sync.Mutex
-	layer           types.LayerID
-}
-
-func (c *SharedRoundClock) AwaitWakeup() <-chan struct{} {
-	ch := make(chan struct{})
-	close(ch)
-	return ch
-}
-
-func (c *SharedRoundClock) AwaitEndOfRound(round uint32) <-chan struct{} {
-	c.m.Lock()
-	defer c.m.Unlock()
-	return c.getRound(round)
-}
-
-func (c *SharedRoundClock) getRound(round uint32) chan struct{} {
-	ch, ok := c.rounds[round]
-	if !ok {
-		ch = make(chan struct{})
-		c.rounds[round] = ch
-	}
-	return ch
-}
-
-// RoundEnd is currently called only by metrics reporting code, so the returned
-// value should not affect how components behave.
-func (c *SharedRoundClock) RoundEnd(round uint32) time.Time {
-	return time.Now()
-}
-
-func (c *SharedRoundClock) IncMessages(cnt int, round uint32) {
-	c.m.Lock()
-	defer c.m.Unlock()
-
-	c.messageCount += cnt
-	println("incmessages for round", c.currentRound, "message round", round, "for layer", c.layer.Value, "current count", c.messageCount)
-	// if c.messageCount > c.minCount {
-	// 	panic("violation")
-	// }
-	if c.messageCount >= c.minCount {
-		time.AfterFunc(c.processingDelay, func() {
-			c.m.Lock()
-			defer c.m.Unlock()
-			println("progressing to round", c.currentRound+1, "for layer", c.layer.Value)
-			c.advanceRound()
-		})
-	}
-}
-
-func (c *SharedRoundClock) advanceRound() {
-	c.messageCount = 0
-	c.currentRound++
-	if prevRound, ok := c.rounds[c.currentRound-1]; ok {
-		println("closing old round", prevRound, c.currentRound-1)
-		close(prevRound)
-	}
-}
-
-// advanceToRound advances the clock to the given round.
-func (c *SharedRoundClock) advanceToRound(round uint32) {
-	println("about to acquire lock")
-	c.m.Lock()
-	println("acquired lock")
-	defer c.m.Unlock()
-	println("deferred unlock lock")
-	println("advanceToRound current", c.currentRound, "target", round)
-
-	for c.currentRound < round {
-		println("advancing to round", c.currentRound+1, "closing")
-		// Ensure that the channel exists before we close it
-		c.getRound(c.currentRound)
-		c.advanceRound()
-	}
-}
-
-// sharedRoundClocks provides functionality to create shared round clocks that
-// can be injected into Hare, it uses a map to enusre that all hare instances
-// share the same round clock instance for each layer and provies methods to
-// safely interact with the map from multiple goroutines.
-type sharedRoundClocks struct {
-	// The number of messages that need to be received before progressing to
-	// the next round.
-	roundMessageCount int
-	// The time to wait between reaching the roundMessageCount and progressing
-	// to the next round, this is to allow for messages received over pubsub to
-	// be processed by hare before moving to the next round.
-	processingDelay time.Duration
-	clocks          map[types.LayerID]*SharedRoundClock
-	m               sync.Mutex
-}
-
-func newSharedRoundClocks(roundMessageCount int, processingDelay time.Duration) *sharedRoundClocks {
-	return &sharedRoundClocks{
-		roundMessageCount: roundMessageCount,
-		processingDelay:   processingDelay,
-		clocks:            make(map[types.LayerID]*SharedRoundClock),
-	}
-}
-
-// roundClock returns the shared round clock for the given layer, if the clock doesn't exist it will be created.
-func (rc *sharedRoundClocks) roundClock(layer types.LayerID) RoundClock {
-	rc.m.Lock()
-	defer rc.m.Unlock()
-	c, exist := rc.clocks[layer]
-	if !exist {
-		c = &SharedRoundClock{
-			currentRound:    preRound,
-			rounds:          make(map[uint32]chan struct{}),
-			minCount:        rc.roundMessageCount,
-			processingDelay: rc.processingDelay,
-			messageCount:    0,
-			layer:           layer,
-		}
-		rc.clocks[layer] = c
-	}
-	return c
-}
-
-// clock returns the clock for the given layer, if the clock does not exist the
-// returned value will be nil.
-func (rc *sharedRoundClocks) clock(layer types.LayerID) *SharedRoundClock {
-	rc.m.Lock()
-	defer rc.m.Unlock()
-	return rc.clocks[layer]
-}
-
-func extractInstanceID(payload []byte) (types.LayerID, uint16) {
-	m, err := MessageFromBuffer(payload)
-	if err != nil {
-		panic(err)
-	}
-	return m.Layer, m.Eligibility.Count
-}
-
-// testPublisherSubscriber wraps a PublisherSubscriber and hooks into the
-// message handler to be able to be notified of received messages.
-type testPublisherSubscriber struct {
-	pubsub.PublishSubsciber
-	notify func([]byte)
-}
-
-func (ps *testPublisherSubscriber) Register(protocol string, handler pubsub.GossipHandler) {
-	ps.PublishSubsciber.Register(
-		protocol,
-		func(ctx context.Context, id peer.ID, msg []byte) pubsub.ValidationResult {
-			res := handler(ctx, id, msg)
-			ps.notify(msg)
-			return res
-		},
-	)
 }
