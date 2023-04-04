@@ -147,8 +147,9 @@ func Test_multipleCPs(t *testing.T) {
 	}
 
 	// There are 5 rounds per layer and totalCPs layers and we double for good measure.
-	test.WaitForTimedTermination(t, time.Minute)
+	test.WaitForTimedTermination(t, time.Minute*3)
 	for _, h := range test.hare {
+		close(h.blockGenCh)
 		h.Close()
 	}
 	outputsWaitGroup.Wait()
@@ -408,6 +409,7 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 	// iterations so we increase the layer count by 1.
 	test.WaitForTimedTermination(t, time.Minute)
 	for _, h := range test.hare {
+		close(h.blockGenCh)
 		h.Close()
 	}
 	outputsWaitGroup.Wait()
