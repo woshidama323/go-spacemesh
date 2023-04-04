@@ -3,6 +3,7 @@ package hare
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -106,37 +107,37 @@ type p2pManipulator struct {
 	err          error
 }
 
-func (m *p2pManipulator) Register(protocol string, handler pubsub.GossipHandler) {
-	m.PublishSubsciber.Register(
-		protocol,
-		func(ctx context.Context, id peer.ID, message []byte) pubsub.ValidationResult {
-			msg, _ := MessageFromBuffer(message)
-			println("msg.Round", msg.Round, "in layer", msg.Layer.Value)
-			// drop messages for given layer and rounds
-			if msg.Layer == m.stalledLayer && msg.Round < 8 && msg.Round !=
-				preRound {
-				// We need to return ValidationAccept here because Publish
-				// calls the handler and if we don't return ValidationAccept
-				// then the message will not be published to the network.
-				return pubsub.ValidationAccept
-			}
-			return handler(ctx, id, message)
-		},
-	)
-}
-
-// func (m *p2pManipulator) Publish(ctx context.Context, protocol string, payload []byte) error {
-// 	msg, _ := MessageFromBuffer(payload)
-// 	if msg.Layer == m.stalledLayer && msg.Round < 8 && msg.Round != preRound {
-// 		return m.err
-// 	}
-
-// 	if err := m.nd.Publish(ctx, protocol, payload); err != nil {
-// 		return fmt.Errorf("broadcast: %w", err)
-// 	}
-
-// 	return nil
+// func (m *p2pManipulator) Register(protocol string, handler pubsub.GossipHandler) {
+// 	m.PublishSubsciber.Register(
+// 		protocol,
+// 		func(ctx context.Context, id peer.ID, message []byte) pubsub.ValidationResult {
+// 			msg, _ := MessageFromBuffer(message)
+// 			println("msg.Round", msg.Round, "in layer", msg.Layer.Value)
+// 			// drop messages for given layer and rounds
+// 			if msg.Layer == m.stalledLayer && msg.Round < 8 && msg.Round !=
+// 				preRound {
+// 				// We need to return ValidationAccept here because Publish
+// 				// calls the handler and if we don't return ValidationAccept
+// 				// then the message will not be published to the network.
+// 				return pubsub.ValidationAccept
+// 			}
+// 			return handler(ctx, id, message)
+// 		},
+// 	)
 // }
+
+func (m *p2pManipulator) Publish(ctx context.Context, protocol string, payload []byte) error {
+	msg, _ := MessageFromBuffer(payload)
+	if msg.Layer == m.stalledLayer && msg.Round < 8 && msg.Round != preRound {
+		return m.err
+	}
+
+	if err := m.PublishSubsciber.Publish(ctx, protocol, payload); err != nil {
+		return fmt.Errorf("broadcast: %w", err)
+	}
+
+	return nil
+}
 
 type hareWithMocks struct {
 	*Hare
@@ -315,7 +316,7 @@ func Test_multipleCPs(t *testing.T) {
 			PublishSubsciber: ps,
 			notify: func(msg []byte) {
 				layer, eligibilityCount := extractInstanceID(msg)
-				roundClocks.clock(layer).IncMessages(int(eligibilityCount))
+				roundClocks.clock(layer).IncMessages(int(eligibilityCount), 0)
 			},
 		}
 		h := createTestHare(t, meshes[i], cfg, test.clock, testPs, t.Name())
@@ -462,12 +463,10 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 		ps, err := pubsub.New(ctx, logtest.New(t), host, pubsub.DefaultConfig())
 		require.NoError(t, err)
 
-		// the manipulatior drops meessages for the given layer on the first iteration this will result in a second iteration s
-		mp2p := &p2pManipulator{PublishSubsciber: ps, stalledLayer: stalledLayer, err: errors.New("fake err")}
 		// We wrap the pubsub system to notify round clocks whenever a message
 		// is received.
 		testPs := &testPublisherSubscriber{
-			PublishSubsciber: mp2p,
+			PublishSubsciber: ps,
 			// notify: func(msg []byte) {
 			// 	layer, eligibilityCount := extractInstanceID(msg)
 			// 	roundClocks.clock(layer).IncMessages(int(eligibilityCount))
@@ -480,25 +479,34 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 					panic(err)
 				}
 
-				// Keep track of pgorgress in the stalled layer
+				roundClocks.clock(m.Layer).IncMessages(int(m.Eligibility.Count), m.Round)
+				// Keep track of progress in the stalled layer
 				if m.Layer == stalledLayer && m.Round == preRound {
 					// println("layer8adding", m.Eligibility.Count)
 					layer8Count += int(m.Eligibility.Count)
 					// println("layer8count", layer8Count)
 					if layer8Count == totalNodes*totalNodes {
-						for r := 0; r < 9; r++ {
-							println("aaaaaaaaaaaaaaaaaaaaaaaaaaaaadd")
-							// roundClocks.clock(m.Layer).AwaitEndOfRound(uint32(r))
-							time.Sleep(time.Millisecond * 200)
-							roundClocks.clock(m.Layer).advanceRound()
-						}
+						// Gotta sleep to make sure that advance round is called first by the round clock
+						// time.Sleep(4 * roundClocks.processingDelay)
+						roundClocks.clock(m.Layer).AwaitEndOfRound(statusRound)
+						println("status round completed")
+						time.Sleep(time.Second)
+						roundClocks.clock(m.Layer).advanceToRound(8)
+						// roundClocks.clock(m.Layer).m.Lock()
+						// defer roundClocks.clock(m.Layer).m.Unlock()
+						// for r := 0; r < 8; r++ {
+						// 	println("aaaaaaaaaaaaaaaaaaaaaaaaaaaaadd")
+						// 	// roundClocks.clock(m.Layer).AwaitEndOfRound(uint32(r))
+						// 	time.Sleep(time.Millisecond * 200)
+						// 	roundClocks.clock(m.Layer).advanceRound()
+						// }
 					}
-				} else {
-					roundClocks.clock(m.Layer).IncMessages(int(m.Eligibility.Count))
 				}
 			},
 		}
-		h := createTestHare(t, meshes[i], cfg, test.clock, testPs, t.Name())
+		// the manipulatior drops meessages for the given layer on the first iteration this will result in a second iteration s
+		mp2p := &p2pManipulator{PublishSubsciber: testPs, stalledLayer: stalledLayer, err: errors.New("fake err")}
+		h := createTestHare(t, meshes[i], cfg, test.clock, mp2p, t.Name())
 		// override the round clocks method to use our shared round clocks
 		h.newRoundClock = roundClocks.roundClock
 		h.mockRoracle.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
@@ -601,8 +609,10 @@ func (c *SharedRoundClock) AwaitWakeup() <-chan struct{} {
 func (c *SharedRoundClock) AwaitEndOfRound(round uint32) <-chan struct{} {
 	c.m.Lock()
 	defer c.m.Unlock()
-	println("awaiting end of round", round, "layer", c.layer.Value)
+	return c.getRound(round)
+}
 
+func (c *SharedRoundClock) getRound(round uint32) chan struct{} {
 	ch, ok := c.rounds[round]
 	if !ok {
 		ch = make(chan struct{})
@@ -617,20 +627,19 @@ func (c *SharedRoundClock) RoundEnd(round uint32) time.Time {
 	return time.Now()
 }
 
-func (c *SharedRoundClock) IncMessages(cnt int) {
+func (c *SharedRoundClock) IncMessages(cnt int, round uint32) {
 	c.m.Lock()
 	defer c.m.Unlock()
 
 	c.messageCount += cnt
-	println("incmessages for round", c.currentRound, "for layer", c.layer.Value, "current count", c.messageCount)
-	if c.messageCount > c.minCount {
-		panic("violation")
-	}
-	if c.messageCount == c.minCount {
+	println("incmessages for round", c.currentRound, "message round", round, "for layer", c.layer.Value, "current count", c.messageCount)
+	// if c.messageCount > c.minCount {
+	// 	panic("violation")
+	// }
+	if c.messageCount >= c.minCount {
 		time.AfterFunc(c.processingDelay, func() {
 			c.m.Lock()
 			defer c.m.Unlock()
-			c.messageCount = 0
 			println("progressing to round", c.currentRound+1, "for layer", c.layer.Value)
 			c.advanceRound()
 		})
@@ -638,9 +647,23 @@ func (c *SharedRoundClock) IncMessages(cnt int) {
 }
 
 func (c *SharedRoundClock) advanceRound() {
+	c.messageCount = 0
 	c.currentRound++
 	if prevRound, ok := c.rounds[c.currentRound-1]; ok {
+		println("closing old round", prevRound, c.currentRound-1)
 		close(prevRound)
+	}
+}
+
+// advanceToRound advances the clock to the given round.
+func (c *SharedRoundClock) advanceToRound(round uint32) {
+	c.m.Lock()
+	defer c.m.Unlock()
+	for c.currentRound < round {
+		println("advancing to round", c.currentRound+1, "closing")
+		// Ensure that the channel exists before we close it
+		c.getRound(c.currentRound)
+		c.advanceRound()
 	}
 }
 

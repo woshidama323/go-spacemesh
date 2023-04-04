@@ -381,6 +381,8 @@ PreRound:
 				proc.Log.Fatal("unexpected message type")
 			}
 		case <-endOfRound: // next round event
+
+			println("round ended", proc.getRound(), "layer", proc.layer.Value)
 			proc.onRoundEnd(ctx)
 			if proc.terminating() {
 				return
@@ -543,6 +545,10 @@ func (proc *consensusProcess) sendMessage(ctx context.Context, msg *Msg) bool {
 	)
 	logger := proc.WithContext(ctx)
 
+	if msg.Layer.Value == 8 && msg.Round == 9 {
+		proc.Log.Warning("sending message for layer 8 round 9 hash:%v", msg.MsgHash.ShortString())
+	}
+
 	if err := proc.publisher.Publish(ctx, pubsub.HareProtocol, msg.Bytes()); err != nil {
 		logger.With().Error("failed to broadcast round message", log.Err(err))
 		return false
@@ -582,7 +588,7 @@ func (proc *consensusProcess) onRoundEnd(ctx context.Context) {
 func (proc *consensusProcess) advanceToNextRound(ctx context.Context) {
 	newRound := proc.addToRound(1)
 	if proc.layer.Value == 8 {
-		println("advancing to round in algo", newRound)
+		println("advancing to round in algo", newRound, "layer", proc.layer.Value)
 	}
 	if newRound >= RoundsPerIteration && newRound%RoundsPerIteration == 0 {
 		proc.WithContext(ctx).Event().Warning("starting new iteration",
