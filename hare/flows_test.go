@@ -488,9 +488,9 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 					if layer8Count == totalNodes*totalNodes {
 						// Gotta sleep to make sure that advance round is called first by the round clock
 						// time.Sleep(4 * roundClocks.processingDelay)
-						roundClocks.clock(m.Layer).AwaitEndOfRound(statusRound)
+						<-roundClocks.clock(m.Layer).AwaitEndOfRound(preRound)
 						println("status round completed")
-						time.Sleep(time.Second)
+						// time.Sleep(time.Second)
 						roundClocks.clock(m.Layer).advanceToRound(8)
 						// roundClocks.clock(m.Layer).m.Lock()
 						// defer roundClocks.clock(m.Layer).m.Unlock()
@@ -657,8 +657,13 @@ func (c *SharedRoundClock) advanceRound() {
 
 // advanceToRound advances the clock to the given round.
 func (c *SharedRoundClock) advanceToRound(round uint32) {
+	println("about to acquire lock")
 	c.m.Lock()
+	println("acquired lock")
 	defer c.m.Unlock()
+	println("deferred unlock lock")
+	println("advanceToRound current", c.currentRound, "target", round)
+
 	for c.currentRound < round {
 		println("advancing to round", c.currentRound+1, "closing")
 		// Ensure that the channel exists before we close it
