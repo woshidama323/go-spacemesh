@@ -125,7 +125,7 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 		return errNilInner
 	}
 
-	logger.Debug("broker received hare message")
+	logger.Warning("broker received hare message")
 
 	msgLayer := hareMsg.Layer
 	if !b.Synced(ctx, msgLayer) {
