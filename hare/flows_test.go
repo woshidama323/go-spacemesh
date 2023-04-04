@@ -158,11 +158,6 @@ func Test_multipleCPs(t *testing.T) {
 			require.ElementsMatch(t, types.ToProposalIDs(pList[lid]), out[lid].Proposals)
 		}
 	}
-	t.Cleanup(func() {
-		for _, h := range test.hare {
-			h.Close()
-		}
-	})
 }
 
 // Test - run multiple CPs where one of them runs more than one iteration.
@@ -417,9 +412,4 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 			require.ElementsMatch(t, types.ToProposalIDs(pList[lid]), out[lid].Proposals)
 		}
 	}
-	t.Cleanup(func() {
-		for _, h := range test.hare {
-			h.Close()
-		}
-	})
 }
