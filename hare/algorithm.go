@@ -581,6 +581,9 @@ func (proc *consensusProcess) onRoundEnd(ctx context.Context) {
 // advances the state to the next round.
 func (proc *consensusProcess) advanceToNextRound(ctx context.Context) {
 	newRound := proc.addToRound(1)
+	if proc.layer.Value == 8 {
+		println("advancing to round in algo", newRound)
+	}
 	if newRound >= RoundsPerIteration && newRound%RoundsPerIteration == 0 {
 		proc.WithContext(ctx).Event().Warning("starting new iteration",
 			log.Uint32("iteration", inferIteration(newRound)),

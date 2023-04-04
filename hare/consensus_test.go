@@ -236,7 +236,7 @@ func TestConsensus_MultipleIterations(t *testing.T) {
 		host := mesh.Hosts()[i]
 		ps, err := pubsub.New(ctx, logtest.New(t), host, pubsub.DefaultConfig())
 		require.NoError(t, err)
-		p2pm := &p2pManipulator{nd: ps, stalledLayer: instanceID1, err: errors.New("fake err")}
+		p2pm := &p2pManipulator{PublishSubsciber: ps, stalledLayer: instanceID1, err: errors.New("fake err")}
 		sig, err := signing.NewEdSigner()
 		require.NoError(t, err)
 		tcp := createConsensusProcess(t, ctx, sig, true, cfg, oracle, p2pm, test.initialSets[i], instanceID1)
