@@ -361,13 +361,13 @@ func (rc *sharedRoundClocks) clock(layer types.LayerID) *SharedRoundClock {
 	return rc.clocks[layer]
 }
 
-func extractInstanceID(payload []byte) (types.LayerID, uint16) {
-	m, err := MessageFromBuffer(payload)
-	if err != nil {
-		panic(err)
-	}
-	return m.Layer, m.Eligibility.Count
-}
+// func extractInstanceID(payload []byte) (types.LayerID, uint16) {
+// 	m, err := MessageFromBuffer(payload)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return m.Layer, m.Eligibility.Count
+// }
 
 // testPublisherSubscriber wraps a PublisherSubscriber and hooks into the
 // message handler to be able to be notified of received messages.

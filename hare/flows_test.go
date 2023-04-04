@@ -87,9 +87,12 @@ func Test_multipleCPs(t *testing.T) {
 			register: func(protocol string, handler pubsub.GossipHandler) {
 				ps.Register(protocol, func(ctx context.Context, peer peer.ID, message []byte) pubsub.ValidationResult {
 					res := handler(ctx, peer, message)
-					// Update the round clock
-					layer, eligibilityCount := extractInstanceID(message)
-					roundClocks.clock(layer).incMessages(int(eligibilityCount), 0)
+
+					m, err := MessageFromBuffer(message)
+					if err != nil {
+						panic(err)
+					}
+					roundClocks.clock(m.Layer).incMessages(int(m.Eligibility.Count), m.Round)
 					return res
 				})
 			},
