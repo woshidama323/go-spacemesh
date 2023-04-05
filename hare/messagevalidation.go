@@ -475,7 +475,7 @@ func validateStatusType(m *Msg) bool {
 	if m.InnerMsg.Type != status {
 		log.Warning("inner message type is not status", m.InnerMsg.Type.String())
 	}
-	return m.InnerMsg.Type != status
+	return m.InnerMsg.Type == status
 }
 
 // validate SVP for type A (where all Ki=-1).
