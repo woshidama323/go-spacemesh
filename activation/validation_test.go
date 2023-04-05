@@ -579,8 +579,9 @@ func TestValidator_Validate(t *testing.T) {
 	poetDb := NewMockpoetDbAPI(gomock.NewController(t))
 	poetDb.EXPECT().GetProof(gomock.Any()).AnyTimes().DoAndReturn(func(types.PoetProofRef) (*types.PoetProof, error) {
 		proof := &types.PoetProof{
-			Members: []types.Member{types.Member(challengeHash)},
+			Members: make([]types.Member, 1),
 		}
+		copy(proof.Members[0][:], challengeHash.Bytes())
 		return proof, nil
 	})
 	poetDb.EXPECT().ValidateAndStore(gomock.Any(), gomock.Any()).Return(nil)
