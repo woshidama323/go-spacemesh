@@ -140,10 +140,21 @@ func Test_multipleCPs(t *testing.T) {
 		return true
 	}, 5*time.Second, 10*time.Millisecond)
 	log := logtest.New(t)
+	ahead := 0
 	for j := types.GetEffectiveGenesis().Add(1); !j.After(finalLyr); j = j.Add(1) {
+		if ahead > 1 {
+			// We can't allow layers to progress more than 1 ahead of the latest layer
+			// that all nodes have started, otherwise we can end up losing messages
+			// when a node from a future layer sends messages to a node that has not
+			// started that layer. E.g A node that has started layer 8 receives a
+			// message for layer 10, its broker will reject it because the broker only
+			// allows messages one layer ahead not two.
+			<-roundClocks.roundClock(j.Sub(1)).AwaitEndOfRound(preRound)
+			ahead--
+		}
 		test.clock.advanceLayer()
-		time.Sleep(10 * time.Millisecond)
 		log.Warning("advancing to layer %d", j.Uint32())
+		ahead++
 	}
 
 	// There are 5 rounds per layer and totalCPs layers and we double for good measure.
@@ -388,15 +399,23 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 		}
 		return true
 	}, 5*time.Second, 10*time.Millisecond)
-	layerDuration := 250 * time.Millisecond
 	log := logtest.New(t)
-	go func() {
-		for j := types.GetEffectiveGenesis().Add(1); !j.After(finalLyr); j = j.Add(1) {
-			test.clock.advanceLayer()
-			log.Warning("advancing to layer %d", j.Uint32())
-			time.Sleep(layerDuration)
+	ahead := 0
+	for j := types.GetEffectiveGenesis().Add(1); !j.After(finalLyr); j = j.Add(1) {
+		if ahead > 1 {
+			// We can't allow layers to progress more than 1 ahead of the latest layer
+			// that all nodes have started, otherwise we can end up losing messages
+			// when a node from a future layer sends messages to a node that has not
+			// started that layer. E.g A node that has started layer 8 receives a
+			// message for layer 10, its broker will reject it because the broker only
+			// allows messages one layer ahead not two.
+			<-roundClocks.roundClock(j.Sub(1)).AwaitEndOfRound(preRound)
+			ahead--
 		}
-	}()
+		test.clock.advanceLayer()
+		log.Warning("advancing to layer %d", j.Uint32())
+		ahead++
+	}
 
 	// There are 5 rounds per layer and totalCPs layers and we double to allow
 	// for the for good measure. Also one layer in this test will run 2
