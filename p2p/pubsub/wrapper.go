@@ -7,9 +7,11 @@ import (
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/spacemeshos/go-spacemesh/log"
+	"github.com/spacemeshos/go-spacemesh/p2p/book"
 	"github.com/spacemeshos/go-spacemesh/p2p/metrics"
 )
 
@@ -17,6 +19,8 @@ import (
 type PubSub struct {
 	logger log.Log
 	pubsub *pubsub.PubSub
+	host   host.Host
+	book   *book.Book
 
 	mu     sync.RWMutex
 	topics map[string]*pubsub.Topic
@@ -34,6 +38,18 @@ func (ps *PubSub) Register(topic string, handler GossipHandler) {
 		rst := handler(log.WithNewRequestID(ctx), pid, msg.Data)
 		metrics.ProcessedMessagesDuration.WithLabelValues(topic, castResult(rst)).
 			Observe(float64(time.Since(start)))
+		if rst == ValidationReject {
+			// We want to disconnect the peer and also penalize it which could result in it being blacklisted.
+			err := ps.host.Network().ClosePeer(pid)
+			if err != nil {
+				ps.logger.With().Error("failed to close peer",
+					log.String("topic", topic),
+					log.String("peer", pid.ShortString()),
+					log.Err(err),
+				)
+			}
+			ps.book.Penalize(pid.String())
+		}
 		return rst
 	})
 	topich, err := ps.pubsub.Join(topic)

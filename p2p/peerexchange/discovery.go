@@ -54,14 +54,14 @@ type Discovery struct {
 }
 
 // New creates a Discovery instance.
-func New(logger log.Log, h host.Host, config Config) (*Discovery, error) {
+func New(logger log.Log, h host.Host, b *book.Book, config Config) (*Discovery, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &Discovery{
 		cfg:    config,
 		logger: logger,
 		host:   h,
 		cancel: cancel,
-		book:   book.New(),
+		book:   b,
 	}
 	d.collector = newCollector(d.book)
 	var advertise ma.Multiaddr

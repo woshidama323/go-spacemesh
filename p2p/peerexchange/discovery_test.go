@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/spacemeshos/go-spacemesh/log/logtest"
+	"github.com/spacemeshos/go-spacemesh/p2p/book"
 	"github.com/spacemeshos/go-spacemesh/p2p/peerexchange/mocks"
 )
 
@@ -36,7 +37,7 @@ func TestDiscovery_CrawlMesh(t *testing.T) {
 			bootnode = h.Addrs()[0].Encapsulate(p2p)
 		}
 		cfg.Bootnodes = append(cfg.Bootnodes, bootnode.String())
-		instance, err := New(logger, h, cfg)
+		instance, err := New(logger, h, book.New(), cfg)
 		require.NoError(t, err)
 		t.Cleanup(instance.Stop)
 	}
@@ -97,7 +98,7 @@ func TestDiscovery_PrefereRoutablePort(t *testing.T) {
 		defer mu.Unlock()
 		return returned
 	}).AnyTimes()
-	discovery, err := New(logtest.New(t), ph, Config{})
+	discovery, err := New(logtest.New(t), ph, book.New(), Config{})
 	require.NoError(t, err)
 	t.Cleanup(discovery.Stop)
 

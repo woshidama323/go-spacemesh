@@ -16,6 +16,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/hare/config"
 	"github.com/spacemeshos/go-spacemesh/hare/mocks"
 	"github.com/spacemeshos/go-spacemesh/log/logtest"
+	"github.com/spacemeshos/go-spacemesh/p2p/book"
 	"github.com/spacemeshos/go-spacemesh/p2p/pubsub"
 )
 
@@ -93,7 +94,7 @@ func runNodesFor(t *testing.T, ctx context.Context, nodes, leaders, maxLayers, l
 
 	for i := 0; i < nodes; i++ {
 		host := mesh.Hosts()[i]
-		ps, err := pubsub.New(ctx, logtest.New(t), host, pubsub.DefaultConfig())
+		ps, err := pubsub.New(ctx, logtest.New(t), host, book.New(), pubsub.DefaultConfig())
 		require.NoError(t, err)
 		mp2p := &p2pManipulator{nd: ps, stalledLayer: types.LayerID(1), err: errors.New("fake err")}
 

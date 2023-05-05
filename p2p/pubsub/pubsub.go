@@ -12,6 +12,7 @@ import (
 
 	"github.com/spacemeshos/go-spacemesh/hash"
 	"github.com/spacemeshos/go-spacemesh/log"
+	"github.com/spacemeshos/go-spacemesh/p2p/book"
 	p2pmetrics "github.com/spacemeshos/go-spacemesh/p2p/metrics"
 )
 
@@ -90,7 +91,7 @@ type Config struct {
 }
 
 // New creates PubSub instance.
-func New(ctx context.Context, logger log.Log, h host.Host, cfg Config) (*PubSub, error) {
+func New(ctx context.Context, logger log.Log, h host.Host, b *book.Book, cfg Config) (*PubSub, error) {
 	// TODO(dshulyak) refactor code to accept options
 	opts := getOptions(cfg)
 	ps, err := pubsub.NewGossipSub(ctx, h, opts...)
@@ -101,6 +102,8 @@ func New(ctx context.Context, logger log.Log, h host.Host, cfg Config) (*PubSub,
 		logger: logger,
 		pubsub: ps,
 		topics: map[string]*pubsub.Topic{},
+		host:   h,
+		book:   b,
 	}, nil
 }
 

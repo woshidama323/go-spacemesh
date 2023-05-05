@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/spacemeshos/go-spacemesh/log/logtest"
+	"github.com/spacemeshos/go-spacemesh/p2p/book"
 )
 
 func TestGossip(t *testing.T) {
@@ -25,7 +26,7 @@ func TestGossip(t *testing.T) {
 
 	for _, h := range mesh.Hosts() {
 		h := h
-		ps, err := New(ctx, logtest.New(t), h, Config{Flood: true, IsBootnode: true})
+		ps, err := New(ctx, logtest.New(t), h, book.New(), Config{Flood: true, IsBootnode: true})
 		require.NoError(t, err)
 		pubsubs = append(pubsubs, ps)
 		ps.Register(topic, func(ctx context.Context, pid peer.ID, msg []byte) ValidationResult {

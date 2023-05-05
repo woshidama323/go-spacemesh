@@ -11,6 +11,7 @@ import (
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/log"
+	"github.com/spacemeshos/go-spacemesh/p2p/book"
 	"github.com/spacemeshos/go-spacemesh/p2p/handshake"
 	"github.com/spacemeshos/go-spacemesh/p2p/peerexchange"
 	"github.com/spacemeshos/go-spacemesh/p2p/pubsub"
@@ -94,14 +95,15 @@ func Upgrade(h host.Host, genesisID types.Hash20, opts ...Opt) (*Host, error) {
 	if err != nil {
 		return nil, fmt.Errorf("check node as bootnode: %w", err)
 	}
-	if fh.PubSub, err = pubsub.New(fh.ctx, fh.logger, h, pubsub.Config{
+	b := book.New()
+	if fh.PubSub, err = pubsub.New(fh.ctx, fh.logger, h, b, pubsub.Config{
 		Flood:          cfg.Flood,
 		IsBootnode:     bootnode,
 		MaxMessageSize: cfg.MaxMessageSize,
 	}); err != nil {
 		return nil, fmt.Errorf("failed to initialize pubsub: %w", err)
 	}
-	if fh.discovery, err = peerexchange.New(fh.logger, h, peerexchange.Config{
+	if fh.discovery, err = peerexchange.New(fh.logger, h, b, peerexchange.Config{
 		DataDir:          cfg.DataDir,
 		Bootnodes:        cfg.Bootnodes,
 		AdvertiseAddress: cfg.AdvertiseAddress,

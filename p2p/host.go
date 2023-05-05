@@ -7,14 +7,19 @@ import (
 
 	lp2plog "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/control"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
+	"github.com/multiformats/go-multiaddr"
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/log"
+	"github.com/spacemeshos/go-spacemesh/p2p/book"
 	p2pmetrics "github.com/spacemeshos/go-spacemesh/p2p/metrics"
 )
 
@@ -48,6 +53,30 @@ type Config struct {
 	AdvertiseAddress string   `mapstructure:"advertise-address"`
 }
 
+type BlacklistedPeerConnectionGater struct {
+	book book.Book
+}
+
+func (g *BlacklistedPeerConnectionGater) InterceptPeerDial(p peer.ID) (allow bool) {
+	return true
+}
+
+func (g *BlacklistedPeerConnectionGater) InterceptAddrDial(id peer.ID, addr multiaddr.Multiaddr) (allow bool) {
+	return g.book.BlacklistedIP(book.MustHaveIP(addr))
+}
+
+func (g *BlacklistedPeerConnectionGater) InterceptAccept(connAddrs network.ConnMultiaddrs) (allow bool) {
+	return g.book.BlacklistedIP(book.MustHaveIP(connAddrs.RemoteMultiaddr()))
+}
+
+func (g *BlacklistedPeerConnectionGater) InterceptSecured(network.Direction, peer.ID, network.ConnMultiaddrs) (allow bool) {
+	return true
+}
+
+func (g *BlacklistedPeerConnectionGater) InterceptUpgraded(network.Conn) (allow bool, reason control.DisconnectReason) {
+	return true, 0
+}
+
 // New initializes libp2p host configured for spacemesh.
 func New(_ context.Context, logger log.Log, cfg Config, genesisID types.Hash20, opts ...Opt) (*Host, error) {
 	logger.Info("starting libp2p host with config %+v", cfg)
@@ -79,6 +108,7 @@ func New(_ context.Context, logger log.Log, cfg Config, genesisID types.Hash20, 
 		libp2p.ConnectionManager(cm),
 		libp2p.Peerstore(ps),
 		libp2p.BandwidthReporter(p2pmetrics.NewBandwidthCollector()),
+		libp2p.ConnectionGater(nil),
 	}
 	if !cfg.DisableNatPort {
 		lopts = append(lopts, libp2p.NATPortMap())

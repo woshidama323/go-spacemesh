@@ -8,11 +8,13 @@ import (
 	"hash/crc64"
 	"io"
 	"math/rand"
+	"net"
 	"sort"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/multiformats/go-multiaddr"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 )
@@ -129,6 +131,13 @@ func WithRand(seed int64) Opt {
 	}
 }
 
+func WithPenalizeConfig(blacklistThresh uint, blacklistTimeout time.Duration) Opt {
+	return func(b *Book) {
+		b.blacklistThresh = blacklistThresh
+		b.blacklistTimeout = blacklistTimeout
+	}
+}
+
 func New(opts ...Opt) *Book {
 	b := &Book{
 		limit:     50000,
@@ -144,12 +153,16 @@ func New(opts ...Opt) *Book {
 }
 
 type Book struct {
-	mu        sync.Mutex
-	limit     int
-	known     map[ID]*addressInfo
-	queue     *list.List
-	rng       *rand.Rand
-	shareable []*addressInfo
+	mu               sync.Mutex
+	limit            int
+	known            map[ID]*addressInfo
+	queue            *list.List
+	rng              *rand.Rand
+	shareable        []*addressInfo
+	blacklistThresh  uint          // After being penalized this many times a node's IP will be blacklisted.
+	blacklistTimeout time.Duration // The time that a node's IP remains blacklisted for.
+	penalizeCount    map[ID]uint   // Tracks the number of times a node has been penalized.
+	blacklistedIPs   map[string]time.Time
 }
 
 func (b *Book) Add(src, id ID, raw Address) {
@@ -332,6 +345,62 @@ func (b *Book) Stats() Stats {
 	return stats
 }
 
+// Penalize penalizes the given peer, once a peer has been penalized
+// blacklistThresh times, that peer's IP address will be blacklisted for the
+// duration of blacklistTimeout. The reason we don't immediately blacklist
+// offenders and also that we expire the blacklist is that since there could be
+// multiple smeshers behind a single routable IP, and we don't want to
+// unnecessarily block non malicious smeshers.
+func (b *Book) Penalize(peer ID) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	addr := b.known[peer]
+	// If we don't know this peer then we can't blacklist their IP.
+	if addr == nil {
+		return
+	}
+
+	// Don't penalize if We've reached the limit
+	_, ok := b.penalizeCount[peer]
+	if !ok && len(b.penalizeCount) == b.limit {
+		return
+	}
+	b.penalizeCount[peer]++
+	if b.penalizeCount[peer] == b.blacklistThresh {
+		delete(b.penalizeCount, peer)
+		ip := MustHaveIP(&addr.Raw).String()
+		b.blacklistedIPs[ip] = time.Now()
+	}
+}
+
+// BlacklistedIP returns true if the given IP is currently blacklisted.
+// blacklisted, otherwise it returns nil.
+func (b *Book) BlacklistedIP(ip net.IP) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	ipString := ip.String()
+	t, ok := b.blacklistedIPs[ipString]
+	// Check for expiry
+	if ok && time.Since(t) > b.blacklistTimeout {
+		delete(b.blacklistedIPs, ipString)
+		return false
+	}
+	return ok
+}
+
+// CleanBlacklist removes blacklist entries that are older than the blacklist
+// timeout.
+func (b *Book) CleanBlacklists() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := time.Now()
+	for k, v := range b.blacklistedIPs {
+		if now.Sub(v) > b.blacklistTimeout {
+			delete(b.blacklistedIPs, k)
+		}
+	}
+}
+
 func (b *Book) iterShareable(src ID, bucket bucket) iterator {
 	b.rng.Shuffle(len(b.shareable), func(i, j int) {
 		b.shareable[i], b.shareable[j] = b.shareable[j], b.shareable[i]
@@ -436,4 +505,12 @@ func recover(known map[ID]*addressInfo, r io.Reader) error {
 		return fmt.Errorf("stored checksum %d doesn't match computed %d", stored, checksum.Sum64())
 	}
 	return nil
+}
+
+func MustHaveIP(addr multiaddr.Multiaddr) net.IP {
+	ip, err := manet.ToIP(addr)
+	if err != nil {
+		panic(fmt.Sprintf("Error retrieving IP from multiaddr %q, err: %v", addr, err))
+	}
+	return ip
 }
