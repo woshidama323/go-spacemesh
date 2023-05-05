@@ -13,6 +13,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/log/logtest"
 	"github.com/spacemeshos/go-spacemesh/p2p"
+	"github.com/spacemeshos/go-spacemesh/p2p/book"
 	"github.com/spacemeshos/go-spacemesh/timesync/peersync/mocks"
 )
 
@@ -138,7 +139,7 @@ func TestSyncSimulateMultiple(t *testing.T) {
 	require.NoError(t, err)
 	hosts := []*p2p.Host{}
 	for _, h := range mesh.Hosts() {
-		fh, err := p2p.Upgrade(h, genesisID)
+		fh, err := p2p.Upgrade(h, genesisID, book.New())
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = fh.Stop() })
 		hosts = append(hosts, fh)

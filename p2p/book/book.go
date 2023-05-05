@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/multiformats/go-multiaddr"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 )
@@ -507,7 +506,7 @@ func recover(known map[ID]*addressInfo, r io.Reader) error {
 	return nil
 }
 
-func MustHaveIP(addr multiaddr.Multiaddr) net.IP {
+func MustHaveIP(addr ma.Multiaddr) net.IP {
 	ip, err := manet.ToIP(addr)
 	if err != nil {
 		panic(fmt.Sprintf("Error retrieving IP from multiaddr %q, err: %v", addr, err))

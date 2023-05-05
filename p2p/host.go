@@ -8,6 +8,7 @@ import (
 	lp2plog "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/control"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
@@ -17,7 +18,6 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/multiformats/go-multiaddr"
 
-	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/p2p/book"
 	p2pmetrics "github.com/spacemeshos/go-spacemesh/p2p/metrics"
@@ -53,8 +53,12 @@ type Config struct {
 	AdvertiseAddress string   `mapstructure:"advertise-address"`
 }
 
+func NewBlacklistedPeerConnectionGater(b *book.Book) *BlacklistedPeerConnectionGater {
+	return &BlacklistedPeerConnectionGater{b}
+}
+
 type BlacklistedPeerConnectionGater struct {
-	book book.Book
+	book *book.Book
 }
 
 func (g *BlacklistedPeerConnectionGater) InterceptPeerDial(p peer.ID) (allow bool) {
@@ -78,7 +82,7 @@ func (g *BlacklistedPeerConnectionGater) InterceptUpgraded(network.Conn) (allow 
 }
 
 // New initializes libp2p host configured for spacemesh.
-func New(_ context.Context, logger log.Log, cfg Config, genesisID types.Hash20, opts ...Opt) (*Host, error) {
+func New(_ context.Context, logger log.Log, cfg Config, inputOpts ...libp2p.Option) (host.Host, error) {
 	logger.Info("starting libp2p host with config %+v", cfg)
 	key, err := EnsureIdentity(cfg.DataDir)
 	if err != nil {
@@ -110,6 +114,7 @@ func New(_ context.Context, logger log.Log, cfg Config, genesisID types.Hash20, 
 		libp2p.BandwidthReporter(p2pmetrics.NewBandwidthCollector()),
 		libp2p.ConnectionGater(nil),
 	}
+	lopts = append(lopts, inputOpts...)
 	if !cfg.DisableNatPort {
 		lopts = append(lopts, libp2p.NATPortMap())
 	}
@@ -122,8 +127,5 @@ func New(_ context.Context, logger log.Log, cfg Config, genesisID types.Hash20, 
 	logger.With().Info("local node identity",
 		log.String("identity", h.ID().String()),
 	)
-	// TODO(dshulyak) this is small mess. refactor to avoid this patching
-	// both New and Upgrade should use options.
-	opts = append(opts, WithConfig(cfg), WithLog(logger))
-	return Upgrade(h, genesisID, opts...)
+	return h, nil
 }

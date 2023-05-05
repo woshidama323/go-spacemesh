@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
+	"github.com/spacemeshos/go-spacemesh/p2p/book"
 )
 
 func TestIsBootnode(t *testing.T) {
@@ -59,7 +60,7 @@ func TestConnectionsNotifier(t *testing.T) {
 	// we count events - not peers
 	for i, host := range mesh.Hosts() {
 		i := i
-		_, err := Upgrade(host, types.Hash20{}, WithNodeReporter(func() { counter[i].Add(1) }))
+		_, err := Upgrade(host, types.Hash20{}, book.New(), WithNodeReporter(func() { counter[i].Add(1) }))
 		require.NoError(t, err)
 	}
 

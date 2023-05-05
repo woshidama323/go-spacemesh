@@ -18,6 +18,7 @@ import (
 	grpc_logsettable "github.com/grpc-ecosystem/go-grpc-middleware/logging/settable"
 	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 	grpctags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
+	"github.com/libp2p/go-libp2p"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pyroscope-io/pyroscope/pkg/agent/profiler"
 	"github.com/spf13/cobra"
@@ -50,6 +51,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/metrics"
 	"github.com/spacemeshos/go-spacemesh/miner"
 	"github.com/spacemeshos/go-spacemesh/p2p"
+	"github.com/spacemeshos/go-spacemesh/p2p/book"
 	"github.com/spacemeshos/go-spacemesh/p2p/pubsub"
 	"github.com/spacemeshos/go-spacemesh/proposals"
 	"github.com/spacemeshos/go-spacemesh/signing"
@@ -1185,11 +1187,20 @@ func (app *App) Start(ctx context.Context) error {
 	p2plog := app.addLogger(P2PLogger, lg)
 	// if addLogger won't add a level we will use a default 0 (info).
 	cfg.LogLevel = app.getLevel(P2PLogger)
-	app.host, err = p2p.New(ctx, p2plog, cfg, app.Config.Genesis.GenesisID(),
-		p2p.WithNodeReporter(events.ReportNodeStatusUpdate),
-	)
+
+	b := book.New()
+	host, err := p2p.New(ctx, p2plog, cfg, libp2p.ConnectionGater(p2p.NewBlacklistedPeerConnectionGater(b)))
 	if err != nil {
 		return fmt.Errorf("failed to initialize p2p host: %w", err)
+	}
+	opts := []p2p.Opt{
+		p2p.WithConfig(cfg),
+		p2p.WithLog(logger),
+		p2p.WithNodeReporter(events.ReportNodeStatusUpdate),
+	}
+	app.host, err = p2p.Upgrade(host, app.Config.Genesis.GenesisID(), b, opts...)
+	if err != nil {
+		return fmt.Errorf("failed to ubgrade p2p host: %w", err)
 	}
 
 	dbStorepath := app.Config.DataDir()

@@ -80,7 +80,7 @@ func isBootnode(h host.Host, bootnodes []string) (bool, error) {
 }
 
 // Upgrade creates Host instance from host.Host.
-func Upgrade(h host.Host, genesisID types.Hash20, opts ...Opt) (*Host, error) {
+func Upgrade(h host.Host, genesisID types.Hash20, b *book.Book, opts ...Opt) (*Host, error) {
 	fh := &Host{
 		ctx:    context.Background(),
 		cfg:    DefaultConfig(),
@@ -95,7 +95,6 @@ func Upgrade(h host.Host, genesisID types.Hash20, opts ...Opt) (*Host, error) {
 	if err != nil {
 		return nil, fmt.Errorf("check node as bootnode: %w", err)
 	}
-	b := book.New()
 	if fh.PubSub, err = pubsub.New(fh.ctx, fh.logger, h, b, pubsub.Config{
 		Flood:          cfg.Flood,
 		IsBootnode:     bootnode,

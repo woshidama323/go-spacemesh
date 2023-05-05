@@ -51,6 +51,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/log/logtest"
 	"github.com/spacemeshos/go-spacemesh/p2p"
+	"github.com/spacemeshos/go-spacemesh/p2p/book"
 	"github.com/spacemeshos/go-spacemesh/signing"
 	"github.com/spacemeshos/go-spacemesh/timesync"
 )
@@ -434,7 +435,7 @@ func TestSpacemeshApp_NodeService(t *testing.T) {
 
 	edSgn, err := signing.NewEdSigner()
 	require.NoError(t, err)
-	h, err := p2p.Upgrade(mesh.Hosts()[0], cfg.Genesis.GenesisID())
+	h, err := p2p.Upgrade(mesh.Hosts()[0], cfg.Genesis.GenesisID(), book.New())
 	require.NoError(t, err)
 	app, err := initSingleInstance(logger, *cfg, 0, cfg.Genesis.GenesisTime,
 		path, eligibility.New(logtest.New(t)),
