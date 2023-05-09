@@ -66,11 +66,11 @@ func (g *BlacklistedPeerConnectionGater) InterceptPeerDial(p peer.ID) (allow boo
 }
 
 func (g *BlacklistedPeerConnectionGater) InterceptAddrDial(id peer.ID, addr multiaddr.Multiaddr) (allow bool) {
-	return g.book.BlacklistedIP(book.MustHaveIP(addr))
+	return !g.book.BlacklistedIP(book.MustHaveIP(addr))
 }
 
 func (g *BlacklistedPeerConnectionGater) InterceptAccept(connAddrs network.ConnMultiaddrs) (allow bool) {
-	return g.book.BlacklistedIP(book.MustHaveIP(connAddrs.RemoteMultiaddr()))
+	return !g.book.BlacklistedIP(book.MustHaveIP(connAddrs.RemoteMultiaddr()))
 }
 
 func (g *BlacklistedPeerConnectionGater) InterceptSecured(network.Direction, peer.ID, network.ConnMultiaddrs) (allow bool) {
