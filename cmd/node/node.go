@@ -1270,6 +1270,10 @@ func (app *App) Start(ctx context.Context) error {
 	}
 }
 
+func (app *App) Host() *p2p.Host {
+	return app.host
+}
+
 type layerFetcher struct {
 	system.Fetcher
 }
