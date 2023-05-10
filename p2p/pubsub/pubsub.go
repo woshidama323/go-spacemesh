@@ -3,7 +3,6 @@ package pubsub
 import (
 	"context"
 	"fmt"
-	"runtime/debug"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -164,16 +163,6 @@ func msgID(msg *pb.Message) string {
 	return string(hasher.Sum(nil))
 }
 
-type tempTracer struct{}
-
-func (t *tempTracer) Trace(evt *pb.TraceEvent) {
-	// fmt.Printf("EVENT %v PEER: %s\n%v\n", evt.Type.String(), peer.ID(evt.PeerID), string(debug.Stack()))
-	fmt.Printf("EVENT %v PEER: %s\n", evt.Type.String(), peer.ID(evt.PeerID))
-	if *evt.Type == pb.TraceEvent_ADD_PEER {
-		fmt.Printf("add peer %v\n", string(debug.Stack()))
-	}
-}
-
 func getOptions(cfg Config) []pubsub.Option {
 	options := []pubsub.Option{
 		// Gossipsubv1.1 configuration
@@ -184,7 +173,6 @@ func getOptions(cfg Config) []pubsub.Option {
 		pubsub.WithPeerOutboundQueueSize(8192),
 		pubsub.WithValidateQueueSize(8192),
 		pubsub.WithRawTracer(p2pmetrics.NewGoSIPCollector()),
-		pubsub.WithEventTracer(&tempTracer{}),
 		pubsub.WithPeerScore(
 			&pubsub.PeerScoreParams{
 				AppSpecificScore: func(p peer.ID) float64 {
