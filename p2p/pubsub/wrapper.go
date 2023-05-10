@@ -40,6 +40,8 @@ func (ps *PubSub) Register(topic string, handler GossipHandler) {
 			Observe(float64(time.Since(start)))
 		if rst == ValidationReject {
 			// We want to disconnect the peer and also penalize it which could result in it being blacklisted.
+
+			// Ok we close the peer here but the deadpeerhandler may try a redial if the state of the conn is connected
 			err := ps.host.Network().ClosePeer(pid)
 			if err != nil {
 				ps.logger.With().Error("failed to close peer",

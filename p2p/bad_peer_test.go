@@ -42,12 +42,12 @@ func TestBlacklist(t *testing.T) {
 	defer cancel()
 	conf1 := config.DefaultTestConfig()
 	conf1.DataDirParent = t.TempDir()
-	conf1.P2P.Listen = "/ip4/0.0.0.0/tcp/0"
+	conf1.P2P.Listen = "/ip4/127.0.0.1/tcp/0"
 	app1, err := NewApp(&conf1)
 	require.NoError(t, err)
 	conf2 := config.DefaultTestConfig()
 	conf2.DataDirParent = t.TempDir()
-	conf2.P2P.Listen = "/ip4/0.0.0.0/tcp/0"
+	conf2.P2P.Listen = "/ip4/127.0.0.1/tcp/0"
 	app2, err := NewApp(&conf2)
 	require.NoError(t, err)
 	g := errgroup.Group{}
@@ -83,11 +83,26 @@ func TestBlacklist(t *testing.T) {
 
 	time.Sleep(time.Second)
 
+	conns := app2.Host().Network().ConnsToPeer(app1.Host().ID())
+	streams := conns[0].GetStreams()
+	for _, s := range streams {
+		fmt.Printf("stream: %+v\n", s.Protocol())
+	}
+	printcons(app1, app2)
+
 	// printcons(app1, app2)
 	println("newstream")
-	s, err := app2.Host().NewStream(ctx, app1.Host().ID(), pubsub.GossipSubID_v11)
-	require.NoError(t, err)
-	println(s)
+	var s network.Stream
+	for _, str := range streams {
+		if str.Protocol() == pubsub.GossipSubID_v11 && str.Stat().Direction == network.DirOutbound {
+			s = str
+			break
+		}
+		// fmt.Printf("stream: %+v %v\n", s.Protocol(), s.Stat().Direction)
+	}
+	// s, err := app2.Host().NewStream(ctx, app1.Host().ID(), pubsub.GossipSubID_v11)
+	// require.NoError(t, err)
+	// println(s)
 
 	time.Sleep(time.Second)
 	// k := app2.Host().Peerstore().PrivKey(app2.Host().ID())
@@ -96,11 +111,15 @@ func TestBlacklist(t *testing.T) {
 	require.Greater(t, len(app2.Host().Network().ConnsToPeer(app1.Host().ID())), 0)
 	// printcons(app1, app2)
 	println("send")
+	println("peer1", app1.Host().ID().String())
+	println("peer2", app2.Host().ID().String())
 	msg := makeMessage(make([]byte, 20), app2.Host().ID(), 100000)
 	// err = signMessage(app2.Host().ID(), k, msg)
 	// require.NoError(t, err)
 	err = writeRpc(rpcWithMessages(msg), s)
 	require.NoError(t, err)
+
+	printcons(app1, app2)
 
 	// for {
 	// 	time.Sleep(time.Second)
@@ -187,8 +206,6 @@ func writeRpc(rpc *pubsub.RPC, s network.Stream) error {
 
 func makeMessage(data []byte, id peer.ID, sequence uint64) *pb.Message {
 	protocol := ps.AtxProtocol
-	seqno := make([]byte, 8)
-	binary.BigEndian.PutUint64(seqno, sequence)
 	m := &pb.Message{
 		Data:  data,
 		Topic: &protocol,
