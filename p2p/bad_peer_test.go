@@ -3,7 +3,6 @@ package p2p_test
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"testing"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	varint "github.com/multiformats/go-varint"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -24,22 +24,11 @@ import (
 	ps "github.com/spacemeshos/go-spacemesh/p2p/pubsub"
 )
 
-func TestBlacklist(t *testing.T) {
-	// conf := &config.Config{
-	// 	BaseConfig: config.BaseConfig{
-	// 		LayerDuration: time.Minute,
-	// 		DataDirParent: t.TempDir(),
-	// 	},
-	// 	Tortoise: tortoise.Config{
-	// 		Zdist: 1,
-	// 	},
-	// 	Genesis: &config.GenesisConfig{
-	// 		GenesisTime: time.Now().Format(time.RFC3339),
-	// 	},
-	// }
-
+func TestPeerDisconnectForMessageResultValidationReject(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Make 2 node instances
 	conf1 := config.DefaultTestConfig()
 	conf1.DataDirParent = t.TempDir()
 	conf1.P2P.Listen = "/ip4/127.0.0.1/tcp/0"
@@ -50,11 +39,11 @@ func TestBlacklist(t *testing.T) {
 	conf2.P2P.Listen = "/ip4/127.0.0.1/tcp/0"
 	app2, err := NewApp(&conf2)
 	require.NoError(t, err)
-	g := errgroup.Group{}
-	defer func() {
+	t.Cleanup(func() {
 		app1.Cleanup(ctx)
 		app2.Cleanup(ctx)
-	}()
+	})
+	g := errgroup.Group{}
 	g.Go(func() error {
 		return app1.Start(ctx)
 	})
@@ -64,130 +53,66 @@ func TestBlacklist(t *testing.T) {
 	})
 	<-app2.Started()
 
-	// app.Host().Peerstore().AddAddr(, addr multiaddr.Multiaddr, ttl time.Duration)
-	// app.Host().Connect(, pi peer.AddrInfo)
-	// h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
-	// require.NoError(t, err)
-	// fmt.Printf("addrs %+v\n", h.Addrs())
-	fmt.Printf("addrs %+v\n", app1.Host().Addrs())
-	fmt.Printf("ids %v %v\n", app1.Host().ID(), app2.Host().ID())
-
-	time.Sleep(time.Second)
-	printcons(app1, app2)
-	println("newsconnect")
+	// Connect app2 to app1
 	err = app2.Host().Connect(context.Background(), peer.AddrInfo{
 		ID:    app1.Host().ID(),
 		Addrs: app1.Host().Addrs(),
 	})
 	require.NoError(t, err)
 
-	time.Sleep(time.Second)
-
 	conns := app2.Host().Network().ConnsToPeer(app1.Host().ID())
-	streams := conns[0].GetStreams()
-	for _, s := range streams {
-		fmt.Printf("stream: %+v\n", s.Protocol())
+	require.Equal(t, 1, len(conns))
+
+	// Wait for streams to be established, one outbound and one inbound.
+	require.Eventually(t, func() bool {
+		return len(conns[0].GetStreams()) == 2
+	}, time.Second*5, time.Millisecond*50)
+
+	s := getStream(conns[0], pubsub.GossipSubID_v11, network.DirOutbound)
+
+	// Create invalid atx message.
+	protocol := ps.AtxProtocol
+	m := &pb.Message{
+		Data:  make([]byte, 20),
+		Topic: &protocol,
 	}
-	printcons(app1, app2)
-
-	// printcons(app1, app2)
-	println("newstream")
-	var s network.Stream
-	for _, str := range streams {
-		if str.Protocol() == pubsub.GossipSubID_v11 && str.Stat().Direction == network.DirOutbound {
-			s = str
-			break
-		}
-		// fmt.Printf("stream: %+v %v\n", s.Protocol(), s.Stat().Direction)
-	}
-	// s, err := app2.Host().NewStream(ctx, app1.Host().ID(), pubsub.GossipSubID_v11)
-	// require.NoError(t, err)
-	// println(s)
-
-	time.Sleep(time.Second)
-	// k := app2.Host().Peerstore().PrivKey(app2.Host().ID())
-
-	printcons(app1, app2)
-	require.Greater(t, len(app2.Host().Network().ConnsToPeer(app1.Host().ID())), 0)
-	// printcons(app1, app2)
-	println("send")
-	println("peer1", app1.Host().ID().String())
-	println("peer2", app2.Host().ID().String())
-	msg := makeMessage(make([]byte, 20), app2.Host().ID(), 100000)
-	// err = signMessage(app2.Host().ID(), k, msg)
-	// require.NoError(t, err)
-	err = writeRpc(rpcWithMessages(msg), s)
+	// Send the invalid message.
+	err = writeRpc(rpcWithMessages(m), s)
 	require.NoError(t, err)
 
-	printcons(app1, app2)
-
-	// for {
-	// 	time.Sleep(time.Second)
-	// 	printcons(app1, app2)
-
-	// }
-
 	require.Eventually(t, func() bool {
-		printcons(app1, app2)
 		return len(app2.Host().Network().ConnsToPeer(app1.Host().ID())) == 0
 	}, time.Second*15, time.Millisecond*200)
 
-	// fmt.Printf("conns to peer %v\n", len(app2.Host().Network().ConnsToPeer(app1.Host().ID())))
-	// for {
-	// 	time.Sleep(time.Second)
-	// 	printcons(app1, app2)
-
-	// }
-	// err = app2.Host().Publish(ctx, pubsub.AtxProtocol, make([]byte, 20))
-	// require.NoError(t, err)
-	// l, err := s.Write(make([]byte, 10000))
-	// require.NoError(t, err)
-	// println(l)
-
-	// s, err := h.NewStream(context.Background(), app.Host().ID())
-	// require.NoError(t, err)
-	// n, err := s.Write(make([]byte, 1))
-	// require.NoError(t, err)
-	// println(n)
+	// Stop the nodes by canceling the context
 	cancel()
 	require.NoError(t, g.Wait())
 }
 
-func printcons(app1, app2 *node.App) {
-	fmt.Printf("conns to peer %v\n", len(app2.Host().Network().ConnsToPeer(app1.Host().ID())))
-	fmt.Printf("conns to back %v\n", len(app1.Host().Network().ConnsToPeer(app2.Host().ID())))
+func NewApp(conf *config.Config) (*node.App, error) {
+	app := node.New(
+		node.WithConfig(conf),
+		node.WithLog(log.RegisterHooks(
+			log.NewWithLevel("", zap.NewAtomicLevelAt(zapcore.DebugLevel)),
+			events.EventHook())),
+	)
+
+	err := app.Initialize()
+	return app, err
 }
 
-// func signMessage(pid peer.ID, key crypto.PrivKey, m *pb.Message) error {
-// 	bytes, err := m.Marshal()
-// 	if err != nil {
-// 		return err
-// 	}
+func getStream(c network.Conn, p protocol.ID, dir network.Direction) network.Stream {
+	for _, s := range c.GetStreams() {
+		if s.Protocol() == p && s.Stat().Direction == dir {
+			return s
+		}
+	}
+	return nil
+}
 
-// 	bytes = withSignPrefix(bytes)
-
-// 	sig, err := key.Sign(bytes)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	m.Signature = sig
-
-// 	pk, _ := pid.ExtractPublicKey()
-// 	if pk == nil {
-// 		pubk, err := crypto.MarshalPublicKey(key.GetPublic())
-// 		if err != nil {
-// 			return err
-// 		}
-// 		m.Key = pubk
-// 	}
-
-// 	return nil
-// }
-
-// func withSignPrefix(bytes []byte) []byte {
-// 	return append([]byte(pubsub.SignPrefix), bytes...)
-// }
+func rpcWithMessages(msgs ...*pb.Message) *pubsub.RPC {
+	return &pubsub.RPC{RPC: pb.RPC{Publish: msgs}}
+}
 
 func writeRpc(rpc *pubsub.RPC, s network.Stream) error {
 	size := uint64(rpc.Size())
@@ -202,29 +127,4 @@ func writeRpc(rpc *pubsub.RPC, s network.Stream) error {
 
 	_, err = s.Write(buf)
 	return err
-}
-
-func makeMessage(data []byte, id peer.ID, sequence uint64) *pb.Message {
-	protocol := ps.AtxProtocol
-	m := &pb.Message{
-		Data:  data,
-		Topic: &protocol,
-	}
-	return m
-}
-
-func rpcWithMessages(msgs ...*pb.Message) *pubsub.RPC {
-	return &pubsub.RPC{RPC: pb.RPC{Publish: msgs}}
-}
-
-func NewApp(conf *config.Config) (*node.App, error) {
-	app := node.New(
-		node.WithConfig(conf),
-		node.WithLog(log.RegisterHooks(
-			log.NewWithLevel("", zap.NewAtomicLevelAt(zapcore.DebugLevel)),
-			events.EventHook())),
-	)
-
-	err := app.Initialize()
-	return app, err
 }
