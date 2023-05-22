@@ -126,6 +126,17 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
+        run:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
         os:
           - ubuntu-latest
         include:
@@ -157,7 +168,7 @@ jobs:
         env:
           GOTESTSUM_FORMAT: standard-verbose
           GOTESTSUM_JUNITFILE: unit-tests.xml
-        run: make test
+        run: eval $(make print-test-env) gotestsum -- -p 1 -race -timeout 5m ./p2p -run TestPeerDisconnectForMessageResultValidationReject -count 100
         continue-on-error: ${{ matrix.allow-failure == 'true' }}
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v3
