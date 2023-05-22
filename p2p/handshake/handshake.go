@@ -166,7 +166,7 @@ func (h *Handshake) handler(stream network.Stream) {
 		return
 	}
 	if h.genesisID != msg.GenesisID {
-		h.logger.Warning("network id mismatch",
+		h.logger.With().Warning("network id mismatch",
 			log.Stringer("genesis id", h.genesisID),
 			log.Stringer("peer genesis id", msg.GenesisID),
 			log.String("peer-id", stream.Conn().RemotePeer().String()),
