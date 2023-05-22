@@ -102,7 +102,7 @@ func DefaultGenesisConfig() *GenesisConfig {
 	// NOTE(dshulyak) keys in default config are used in some tests
 	return &GenesisConfig{
 		ExtraData:   "mainnet",
-		GenesisTime: time.Now().Format(time.RFC3339),
+		GenesisTime: time.Unix(0, 0).Format(time.RFC3339),
 		Accounts:    generateGenesisAccounts(),
 	}
 }
