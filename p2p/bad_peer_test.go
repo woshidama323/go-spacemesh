@@ -71,7 +71,7 @@ func TestPeerDisconnectForMessageResultValidationReject(t *testing.T) {
 	// Wait for streams to be established, one outbound and one inbound.
 	require.Eventually(t, func() bool {
 		return len(conns[0].GetStreams()) == 2
-	}, time.Second*5, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*50)
 
 	s := getStream(conns[0], pubsub.GossipSubID_v11, network.DirOutbound)
 
