@@ -137,6 +137,46 @@ jobs:
           - 8
           - 9
           - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 17
+          - 18
+          - 19
+          - 20
+          - 21
+          - 22
+          - 23
+          - 24
+          - 25
+          - 26
+          - 27
+          - 28
+          - 29
+          - 30
+          - 31
+          - 32
+          - 33
+          - 34
+          - 35
+          - 36
+          - 37
+          - 38
+          - 39
+          - 40
+          - 41
+          - 42
+          - 43
+          - 44
+          - 45
+          - 46
+          - 47
+          - 48
+          - 49
+          - 50
         os:
           - ubuntu-latest
         include:
@@ -168,7 +208,7 @@ jobs:
         env:
           GOTESTSUM_FORMAT: standard-verbose
           GOTESTSUM_JUNITFILE: unit-tests.xml
-        run: eval $(make print-test-env) go test -v -p 1 -race -timeout 5m ./p2p -run TestPeerDisconnectForMessageResultValidationReject -count 100
+        run: eval $(make print-test-env) go test -v -p 1 -race -timeout 10m ./p2p -run TestPeerDisconnectForMessageResultValidationReject -count 200
         continue-on-error: ${{ matrix.allow-failure == 'true' }}
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v3
