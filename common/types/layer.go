@@ -16,6 +16,8 @@ var (
 	// effectiveGenesis marks when actual proposals would start being created in the network. It takes into account
 	// the first genesis epoch and the following epoch in which ATXs are published.
 	effectiveGenesis uint32
+	// Marks whether SetLayersPerEpoch has been called.
+	layersPerEpochCalled uint32
 
 	// EmptyLayerHash is the layer hash for an empty layer.
 	EmptyLayerHash = Hash32{}
@@ -25,15 +27,22 @@ var (
 func SetLayersPerEpoch(layers uint32) {
 	atomic.StoreUint32(&layersPerEpoch, layers)
 	atomic.StoreUint32(&effectiveGenesis, layers*2-1)
+	atomic.StoreUint32(&layersPerEpochCalled, 1)
 }
 
 // GetLayersPerEpoch returns number of layers per epoch.
 func GetLayersPerEpoch() uint32 {
+	if atomic.LoadUint32(&layersPerEpoch) != 1 {
+		panic("SetLayersPerEpoch must be called before calling GetLayersPerEpoch")
+	}
 	return atomic.LoadUint32(&layersPerEpoch)
 }
 
 // GetEffectiveGenesis returns when actual proposals would be created.
 func GetEffectiveGenesis() LayerID {
+	if atomic.LoadUint32(&layersPerEpoch) != 1 {
+		panic("SetLayersPerEpoch must be called before calling GetEffectiveGenesis")
+	}
 	return LayerID(atomic.LoadUint32(&effectiveGenesis))
 }
 
