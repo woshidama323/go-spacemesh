@@ -182,7 +182,7 @@ func getOptions(cfg Config) []pubsub.Option {
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
 		pubsub.WithPeerOutboundQueueSize(8192),
 		pubsub.WithValidateQueueSize(8192),
-		pubsub.WithRawTracer(p2pmetrics.NewGoSIPCollector()),
+		pubsub.WithRawTracer(p2pmetrics.NewGossipCollector()),
 		pubsub.WithPeerScore(
 			&pubsub.PeerScoreParams{
 				AppSpecificScore: func(p peer.ID) float64 {

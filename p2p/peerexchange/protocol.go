@@ -50,7 +50,7 @@ func (p *peerExchange) handler(stream network.Stream) {
 	defer stream.Close()
 	t := time.Now()
 	logger := p.logger.WithFields(log.String("protocol", protocolName),
-		log.String("from", stream.Conn().RemotePeer().Pretty())).With()
+		log.String("from", stream.Conn().RemotePeer().String())).With()
 
 	buf, _, err := codec.DecodeByteSlice(stream)
 	if err != nil {

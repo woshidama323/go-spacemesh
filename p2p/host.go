@@ -121,7 +121,7 @@ func New(_ context.Context, logger log.Log, cfg Config, prologue []byte, opts ..
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize libp2p host: %w", err)
 	}
-	h.Network().Notify(p2pmetrics.NewConnectionsMeeter())
+	h.Network().Notify(p2pmetrics.NewConnectionsMeter())
 
 	logger.Zap().Info("local node identity", zap.Stringer("identity", h.ID()))
 	// TODO(dshulyak) this is small mess. refactor to avoid this patching

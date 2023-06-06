@@ -28,13 +28,13 @@ var (
 	deliveredMessagesBytes = metrics.NewCounter(
 		"delivered_messages_bytes",
 		subsystem,
-		"Total amount of delivered payloads (doesn't count gossipsub metadata)",
+		"Total size of delivered payloads (doesn't count gossipsub metadata)",
 		[]string{"protocol"},
 	)
 	receivedMessagesBytes = metrics.NewCounter(
 		"received_messages_bytes",
 		subsystem,
-		"Total amount of received payloads (doesn't count gossipsub metadata)",
+		"Total size of received payloads (doesn't count gossipsub metadata)",
 		[]string{"protocol"},
 	)
 	deliveredMessagesCount = metrics.NewCounter(
@@ -46,7 +46,7 @@ var (
 	receivedMessagesCount = metrics.NewCounter(
 		"received_messages_count",
 		subsystem,
-		"Total amount of received messages",
+		"Total number of received messages",
 		[]string{"protocol"},
 	)
 )
@@ -61,8 +61,8 @@ type GossipCollector struct {
 	}
 }
 
-// NewGoSIPCollector creates a new GossipCollector.
-func NewGoSIPCollector() *GossipCollector {
+// NewGossipCollector creates a new GossipCollector.
+func NewGossipCollector() *GossipCollector {
 	return &GossipCollector{
 		peers: struct {
 			sync.Mutex
