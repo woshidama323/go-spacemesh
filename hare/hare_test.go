@@ -17,6 +17,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/eligibility"
 	"github.com/spacemeshos/go-spacemesh/hare/config"
 	"github.com/spacemeshos/go-spacemesh/hare/mocks"
+	"github.com/spacemeshos/go-spacemesh/hare3"
 	"github.com/spacemeshos/go-spacemesh/log/logtest"
 	"github.com/spacemeshos/go-spacemesh/p2p/pubsub"
 	pubsubmocks "github.com/spacemeshos/go-spacemesh/p2p/pubsub/mocks"
@@ -55,15 +56,10 @@ type mockConsensusProcess struct {
 	set     *Set
 }
 
-func (mcp *mockConsensusProcess) Start() {
+func (mcp *mockConsensusProcess) Run(_ context.Context) ([]hare3.Hash20, error) {
 	close(mcp.started)
 	mcp.t <- mockReport{mcp.id, mcp.set, true, false}
-}
-
-func (mcp *mockConsensusProcess) Stop() {}
-
-func (mcp *mockConsensusProcess) ID() types.LayerID {
-	return mcp.id
+	return nil, nil
 }
 
 func (mcp *mockConsensusProcess) SetInbox(_ any) {

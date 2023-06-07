@@ -200,6 +200,10 @@ type Protocol struct {
 	active bool
 }
 
+func (p *Protocol) Round() AbsRound {
+	return p.round
+}
+
 func toHash(values []Hash20) Hash20 {
 	return Hash20{}
 }

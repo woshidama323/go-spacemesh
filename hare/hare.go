@@ -14,6 +14,8 @@ import (
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/datastore"
 	"github.com/spacemeshos/go-spacemesh/hare/config"
+	"github.com/spacemeshos/go-spacemesh/hare3"
+	"github.com/spacemeshos/go-spacemesh/hare3/runner"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/p2p/pubsub"
 	"github.com/spacemeshos/go-spacemesh/signing"
@@ -38,9 +40,7 @@ type consensusFactory func(
 
 // Consensus represents an item that acts like a consensus process.
 type Consensus interface {
-	ID() types.LayerID
-	Start()
-	Stop()
+	Run(ctx context.Context) ([]hare3.Hash20, error)
 }
 
 // TerminationOutput represents an output of a consensus process.
@@ -122,7 +122,6 @@ type Hare struct {
 	mu         sync.Mutex
 	lastLayer  types.LayerID
 	outputs    map[types.LayerID][]types.ProposalID
-	cps        map[types.LayerID]Consensus
 
 	factory consensusFactory
 
@@ -183,10 +182,12 @@ func New(
 	h.networkDelta = conf.WakeupDelta
 	h.outputChan = make(chan TerminationOutput, h.config.Hdist)
 	h.outputs = make(map[types.LayerID][]types.ProposalID, h.config.Hdist) // we keep results about LayerBuffer past layers
-	h.cps = make(map[types.LayerID]Consensus, h.config.LimitConcurrent)
 	h.factory = func(ctx context.Context, conf config.Config, instanceId types.LayerID, s *Set, oracle Rolacle, signing *signing.EdSigner, nonce *types.VRFPostIndex, p2p pubsub.Publisher, comm communication, clock RoundClock) Consensus {
-		return newConsensusProcess(ctx, conf, instanceId, s, oracle, stateQ, signing, edVerifier, nid, nonce, p2p, comm, ev, clock, logger)
+		return &runner.ProtocolRunner{}
 	}
+	// h.factory = func(ctx context.Context, conf config.Config, instanceId types.LayerID, s *Set, oracle Rolacle, signing *signing.EdSigner, nonce *types.VRFPostIndex, p2p pubsub.Publisher, comm communication, clock RoundClock) Consensus {
+	// 	return newConsensusProcess(ctx, conf, instanceId, s, oracle, stateQ, signing, edVerifier, nid, nonce, p2p, comm, ev, clock, logger)
+	// }
 
 	h.nodeID = nid
 	h.ctx, h.cancel = context.WithCancel(context.Background())
@@ -385,40 +386,31 @@ func (h *Hare) onTick(ctx context.Context, lid types.LayerID) (bool, error) {
 	cp := h.factory(ctx, h.config, lid, set, h.rolacle, h.sign, nonce, h.publisher, comm, clock)
 
 	logger.With().Info("starting hare", log.Int("num_proposals", len(props)))
-	cp.Start()
-	h.addCP(logger, cp)
+	ctx, cancel := context.WithCancel(h.ctx)
+	defer cancel()
+	h.eg.Go(func() error {
+		result, err := cp.Run(ctx)
+		println(result) // just to get rid of error
+		report := procReport{
+			id:       lid,
+			set:      nil,   // TODO this should be result,
+			coinflip: false, // TODO calculate this elsewhere
+		}
+
+		if err != nil && !errors.Is(err, context.Canceled) {
+			logger.With().Error("Hare process failed", lid.Field(), log.Err(err))
+		} else {
+			report.completed = true
+		}
+		select {
+		case h.outputChan <- report:
+		case <-ctx.Done():
+			logger.With().Info("Hare process shutting down early", lid.Field())
+		}
+		return nil
+	})
 	h.patrol.SetHareInCharge(lid)
 	return true, nil
-}
-
-func (h *Hare) addCP(logger log.Log, cp Consensus) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.cps[cp.ID()] = cp
-	logger.With().Info("number of consensus processes (after register)",
-		log.Int("count", len(h.cps)))
-}
-
-func (h *Hare) getCP(lid types.LayerID) Consensus {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.cps[lid]
-}
-
-func (h *Hare) removeCP(logger log.Log, lid types.LayerID) {
-	cp := h.getCP(lid)
-	if cp == nil {
-		logger.With().Error("failed to find consensus process", lid)
-		return
-	}
-	// do not hold lock while waiting for consensus process to terminate
-	cp.Stop()
-
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	delete(h.cps, cp.ID())
-	logger.With().Info("number of consensus processes (after deregister)",
-		log.Int("count", len(h.cps)))
 }
 
 // goodProposals finds the "good proposals" for the specified layer. a proposal is good if
@@ -535,7 +527,6 @@ func (h *Hare) outputCollectionLoop(ctx context.Context) {
 				logger.With().Warning("error collecting output from hare", log.Err(err))
 			}
 			h.broker.Unregister(ctx, out.ID())
-			h.removeCP(logger, out.ID())
 		case <-h.ctx.Done():
 			return
 		}

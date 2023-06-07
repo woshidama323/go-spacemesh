@@ -1,25 +1,25 @@
 package runner
 
 import (
+	"context"
 	"time"
 
 	"github.com/spacemeshos/go-spacemesh/hare3"
 )
 
 type ProtocolRunner struct {
-	messages  chan MultiMsg
-	handler   hare3.Handler
-	protocol  hare3.Protocol
-	roundTime time.Duration
-	gossiper  NetworkGossiper
+	messages chan MultiMsg
+	handler  hare3.Handler
+	protocol hare3.Protocol
+	clock    RoundClock
+	gossiper NetworkGossiper
 }
 
-func (r *ProtocolRunner) Run() []hare3.Hash20 {
-	t := time.NewTicker(r.roundTime)
-	defer t.Stop()
+func (r *ProtocolRunner) Run(ctx context.Context) ([]hare3.Hash20, error) {
 	for {
 		select {
-		case <-t.C:
+		// We await the beginning of the round, which is achieved by calling AwaitEndOfRound with (round - 1).
+		case <-r.clock.AwaitEndOfRound(uint32(r.protocol.Round() - 1)):
 			toSend, output := r.protocol.NextRound()
 			if toSend != nil {
 				msg, err := buildEncodedOutputMessgae(toSend)
@@ -30,7 +30,7 @@ func (r *ProtocolRunner) Run() []hare3.Hash20 {
 				r.gossiper.Gossip(msg)
 			}
 			if output != nil {
-				return output
+				return output, nil
 			}
 		case multiMsg := <-r.messages:
 			// It is assumed that messages received here have had their
@@ -44,6 +44,8 @@ func (r *ProtocolRunner) Run() []hare3.Hash20 {
 					logerr(err)
 				}
 			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 	}
 }
@@ -68,4 +70,13 @@ func buildEncodedOutputMessgae(m *hare3.OutputMessage) ([]byte, error) {
 }
 
 func logerr(err error) {
+}
+
+// RoundClock is a timer interface.
+type RoundClock interface {
+	AwaitWakeup() <-chan struct{}
+	// RoundEnd returns the time at which round ends, passing round-1 will
+	// return the time at which round starts.
+	RoundEnd(round uint32) time.Time
+	AwaitEndOfRound(round uint32) <-chan struct{}
 }
