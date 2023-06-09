@@ -13,6 +13,7 @@ import (
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/hare/config"
+	"github.com/spacemeshos/go-spacemesh/hare3/runner"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/metrics"
 	"github.com/spacemeshos/go-spacemesh/p2p/pubsub"
@@ -156,7 +157,7 @@ func (ci *CountInfo) Meet(threshold int) bool {
 
 type communication struct {
 	// broker sends all gossip messages to inbox.
-	inbox chan any
+	inbox chan runner.MultiMsg
 	// consensus process sends all malfeasance discovered during hare process
 	// to this mchOut
 	mchOut chan<- *types.MalfeasanceGossip
@@ -312,82 +313,82 @@ func (proc *consensusProcess) eventLoop() {
 		return nil
 	})
 
-	endOfRound := proc.clock.AwaitEndOfRound(preRound)
+	// endOfRound := proc.clock.AwaitEndOfRound(preRound)
 
-PreRound:
-	for {
-		select {
-		// listen to pre-round Messages
-		case msg := <-proc.comm.inbox:
-			if hmsg, ok := msg.(*Message); ok {
-				proc.handleMessage(ctx, hmsg)
-			} else if emsg, ok := msg.(*types.HareEligibilityGossip); ok {
-				proc.onMalfeasance(emsg)
-			} else {
-				proc.Log.Fatal("unexpected message type")
-			}
-		case <-endOfRound:
-			break PreRound
-		case <-proc.ctx.Done():
-			logger.With().Info("terminating: received signal during preround",
-				log.Uint32("current_round", proc.getRound()))
-			return
-		}
-	}
-	logger.With().Debug("preround ended, filtering preliminary set",
-		log.Int("set_size", proc.value.Size()))
-	proc.preRoundTracker.FilterSet(proc.value)
-	if proc.value.Size() == 0 {
-		logger.Event().Warning("preround ended with empty set")
-	} else {
-		logger.With().Info("preround ended",
-			log.Int("set_size", proc.value.Size()))
-	}
-	proc.advanceToNextRound(ctx) // K was initialized to -1, K should be 0
+	// PreRound:
+	// 	for {
+	// 		select {
+	// 		// listen to pre-round Messages
+	// 		case msg := <-proc.comm.inbox:
+	// 			if hmsg, ok := msg.(*Message); ok {
+	// 				proc.handleMessage(ctx, hmsg)
+	// 			} else if emsg, ok := msg.(*types.HareEligibilityGossip); ok {
+	// 				proc.onMalfeasance(emsg)
+	// 			} else {
+	// 				proc.Log.Fatal("unexpected message type")
+	// 			}
+	// 		case <-endOfRound:
+	// 			break PreRound
+	// 		case <-proc.ctx.Done():
+	// 			logger.With().Info("terminating: received signal during preround",
+	// 				log.Uint32("current_round", proc.getRound()))
+	// 			return
+	// 		}
+	// 	}
+	// 	logger.With().Debug("preround ended, filtering preliminary set",
+	// 		log.Int("set_size", proc.value.Size()))
+	// 	proc.preRoundTracker.FilterSet(proc.value)
+	// 	if proc.value.Size() == 0 {
+	// 		logger.Event().Warning("preround ended with empty set")
+	// 	} else {
+	// 		logger.With().Info("preround ended",
+	// 			log.Int("set_size", proc.value.Size()))
+	// 	}
+	// 	proc.advanceToNextRound(ctx) // K was initialized to -1, K should be 0
 
-	// start first iteration
-	proc.onRoundBegin(ctx)
-	endOfRound = proc.clock.AwaitEndOfRound(proc.getRound())
+	// 	// start first iteration
+	// 	proc.onRoundBegin(ctx)
+	// 	endOfRound = proc.clock.AwaitEndOfRound(proc.getRound())
 
-	for {
-		select {
-		case msg := <-proc.comm.inbox: // msg event
-			if proc.terminating() {
-				return
-			}
-			if hmsg, ok := msg.(*Message); ok {
-				proc.handleMessage(ctx, hmsg)
-			} else if emsg, ok := msg.(*types.HareEligibilityGossip); ok {
-				proc.onMalfeasance(emsg)
-			} else {
-				proc.Log.Fatal("unexpected message type")
-			}
-		case <-endOfRound: // next round event
-			proc.onRoundEnd(ctx)
-			if proc.terminating() {
-				return
-			}
-			proc.advanceToNextRound(ctx)
+	// 	for {
+	// 		select {
+	// 		case msg := <-proc.comm.inbox: // msg event
+	// 			if proc.terminating() {
+	// 				return
+	// 			}
+	// 			if hmsg, ok := msg.(*Message); ok {
+	// 				proc.handleMessage(ctx, hmsg)
+	// 			} else if emsg, ok := msg.(*types.HareEligibilityGossip); ok {
+	// 				proc.onMalfeasance(emsg)
+	// 			} else {
+	// 				proc.Log.Fatal("unexpected message type")
+	// 			}
+	// 		case <-endOfRound: // next round event
+	// 			proc.onRoundEnd(ctx)
+	// 			if proc.terminating() {
+	// 				return
+	// 			}
+	// 			proc.advanceToNextRound(ctx)
 
-			// exit if we reached the limit on number of iterations
-			round := proc.getRound()
-			if round >= uint32(proc.cfg.LimitIterations)*RoundsPerIteration {
-				logger.With().Warning("terminating: reached iterations limit",
-					log.Int("limit", proc.cfg.LimitIterations),
-					log.Uint32("current_round", round))
-				proc.report(notCompleted)
-				proc.terminate()
-				return
-			}
-			proc.onRoundBegin(ctx)
-			endOfRound = proc.clock.AwaitEndOfRound(round)
+	// 			// exit if we reached the limit on number of iterations
+	// 			round := proc.getRound()
+	// 			if round >= uint32(proc.cfg.LimitIterations)*RoundsPerIteration {
+	// 				logger.With().Warning("terminating: reached iterations limit",
+	// 					log.Int("limit", proc.cfg.LimitIterations),
+	// 					log.Uint32("current_round", round))
+	// 				proc.report(notCompleted)
+	// 				proc.terminate()
+	// 				return
+	// 			}
+	// 			proc.onRoundBegin(ctx)
+	// 			endOfRound = proc.clock.AwaitEndOfRound(round)
 
-		case <-proc.ctx.Done(): // close event
-			logger.With().Info("terminating: received signal",
-				log.Uint32("current_round", proc.getRound()))
-			return
-		}
-	}
+	//		case <-proc.ctx.Done(): // close event
+	//			logger.With().Info("terminating: received signal",
+	//				log.Uint32("current_round", proc.getRound()))
+	//			return
+	//		}
+	//	}
 }
 
 // handles eligibility proof from hare gossip handler and malfeasance proof gossip handler.
@@ -716,15 +717,15 @@ func (proc *consensusProcess) beginNotifyRound(ctx context.Context) {
 }
 
 // passes all pending messages to the inbox of the process so they will be handled.
-func (proc *consensusProcess) handlePending(pending map[types.NodeID]*Message) {
-	for _, m := range pending {
-		select {
-		case <-proc.ctx.Done():
-			return
-		case proc.comm.inbox <- m:
-		}
-	}
-}
+// func (proc *consensusProcess) handlePending(pending map[types.NodeID]*Message) {
+// 	for _, m := range pending {
+// 		select {
+// 		case <-proc.ctx.Done():
+// 			return
+// 		case proc.comm.inbox <- m:
+// 		}
+// 	}
+// }
 
 // runs the logic of the beginning of a round by its type
 // pending messages are passed for handling.

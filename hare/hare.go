@@ -26,7 +26,6 @@ import (
 )
 
 type consensusFactory func(
-	context.Context,
 	config.Config,
 	types.LayerID,
 	*Set,
@@ -182,8 +181,17 @@ func New(
 	h.networkDelta = conf.WakeupDelta
 	h.outputChan = make(chan TerminationOutput, h.config.Hdist)
 	h.outputs = make(map[types.LayerID][]types.ProposalID, h.config.Hdist) // we keep results about LayerBuffer past layers
-	h.factory = func(ctx context.Context, conf config.Config, instanceId types.LayerID, s *Set, oracle Rolacle, signing *signing.EdSigner, nonce *types.VRFPostIndex, p2p pubsub.Publisher, comm communication, clock RoundClock) Consensus {
-		return &runner.ProtocolRunner{}
+	h.factory = func(conf config.Config, instanceId types.LayerID, s *Set, oracle Rolacle, signing *signing.EdSigner, nonce *types.VRFPostIndex, p2p pubsub.Publisher, comm communication, clock RoundClock) Consensus {
+		// gonna use conf.ExpectedLeaders conf.N  but in the components passed to the protocol rather than passing direct to the protocol runner.
+
+		var gg hare3.GradedGossiper
+		var tgg hare3.TrhesholdGradedGossiper
+		var gc hare3.Gradecaster
+		var lc hare3.LeaderChecker
+		var gossiper runner.NetworkGossiper
+		protocol := hare3.NewProtocol(tgg, gc, lc)
+		handler := hare3.NewHandler(gg, tgg, gc)
+		return runner.NewProtocolRunner(clock, protocol, int8(conf.LimitIterations), handler, comm.inbox, gossiper)
 	}
 	// h.factory = func(ctx context.Context, conf config.Config, instanceId types.LayerID, s *Set, oracle Rolacle, signing *signing.EdSigner, nonce *types.VRFPostIndex, p2p pubsub.Publisher, comm communication, clock RoundClock) Consensus {
 	// 	return newConsensusProcess(ctx, conf, instanceId, s, oracle, stateQ, signing, edVerifier, nid, nonce, p2p, comm, ev, clock, logger)

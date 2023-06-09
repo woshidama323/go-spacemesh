@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"github.com/spacemeshos/go-spacemesh/common/types"
+	"github.com/spacemeshos/go-spacemesh/hare3"
+	"github.com/spacemeshos/go-spacemesh/hare3/runner"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/p2p"
 	"github.com/spacemeshos/go-spacemesh/p2p/pubsub"
@@ -34,9 +36,9 @@ type Broker struct {
 	stateQuerier  stateQuerier             // provides activeness check
 	nodeSyncState system.SyncStateProvider // provider function to check if the node is currently synced
 	mchOut        chan<- *types.MalfeasanceGossip
-	outbox        map[types.LayerID]chan any
-	pending       map[types.LayerID][]any // the buffer of pending early messages for the next layer
-	latestLayer   types.LayerID           // the latest layer to attempt register (successfully or unsuccessfully)
+	outbox        map[types.LayerID]chan runner.MultiMsg
+	pending       map[types.LayerID][]runner.MultiMsg // the buffer of pending early messages for the next layer
+	latestLayer   types.LayerID                       // the latest layer to attempt register (successfully or unsuccessfully)
 	minDeleted    types.LayerID
 	limit         int // max number of simultaneous consensus processes
 
@@ -63,8 +65,8 @@ func newBroker(
 		stateQuerier:  stateQuerier,
 		nodeSyncState: syncState,
 		mchOut:        mch,
-		outbox:        make(map[types.LayerID]chan any),
-		pending:       make(map[types.LayerID][]any),
+		outbox:        make(map[types.LayerID]chan runner.MultiMsg),
+		pending:       make(map[types.LayerID][]runner.MultiMsg),
 		latestLayer:   types.GetEffectiveGenesis(),
 		limit:         limit,
 		minDeleted:    types.GetEffectiveGenesis(),
@@ -136,6 +138,21 @@ func (b *Broker) HandleMessage(ctx context.Context, _ p2p.Peer, msg []byte) pubs
 	return pubsub.ValidationAccept
 }
 
+func toMultiMsg(raw []byte, msg *Message) runner.MultiMsg {
+	values := make([]hare3.Hash20, len(msg.Values))
+	for i := range msg.Values {
+		values[i] = hare3.Hash20(msg.Values[i])
+	}
+	return runner.MultiMsg{
+		RawMessage: raw,
+		Message: runner.Msg{
+			Key:    msg.SmesherID[:],
+			Values: values,
+			Round:  int8(msg.Round),
+		},
+	}
+}
+
 func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 	h := types.CalcMessageHash12(msg, pubsub.HareProtocol)
 	logger := b.WithContext(ctx).WithFields(log.Stringer("latest_layer", b.getLatestLayer()), h)
@@ -144,6 +161,7 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 		logger.With().Error("failed to build message", h, log.Err(err))
 		return err
 	}
+	mm := toMultiMsg(msg, hareMsg)
 	logger = logger.WithFields(log.Inline(hareMsg))
 
 	if hareMsg.InnerMessage == nil {
@@ -210,7 +228,7 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 	}
 
 	if isEarly {
-		return b.handleEarlyMessage(logger, msgLayer, hareMsg.SmesherID, hareMsg)
+		return b.handleEarlyMessage(logger, msgLayer, hareMsg.SmesherID, mm)
 	}
 
 	// has instance, just send
@@ -222,7 +240,7 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 	logger.With().Debug("broker forwarding message to outbox",
 		log.Int("queue_size", len(out)))
 	select {
-	case out <- hareMsg:
+	case out <- mm:
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-b.ctx.Done():
@@ -325,7 +343,7 @@ func (b *Broker) HandleEligibility(ctx context.Context, em *types.HareEligibilit
 	return false
 }
 
-func (b *Broker) getInbox(id types.LayerID) chan any {
+func (b *Broker) getInbox(id types.LayerID) chan runner.MultiMsg {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	out, exist := b.outbox[id]
@@ -335,11 +353,11 @@ func (b *Broker) getInbox(id types.LayerID) chan any {
 	return out
 }
 
-func (b *Broker) handleEarlyMessage(logger log.Log, layer types.LayerID, nodeID types.NodeID, msg any) error {
+func (b *Broker) handleEarlyMessage(logger log.Log, layer types.LayerID, nodeID types.NodeID, msg runner.MultiMsg) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if _, exist := b.pending[layer]; !exist { // create buffer if first msg
-		b.pending[layer] = make([]any, 0, inboxCapacity)
+		b.pending[layer] = make([]runner.MultiMsg, 0, inboxCapacity)
 	}
 
 	// we want to write all buffered messages to a chan with InboxCapacity len
@@ -371,7 +389,7 @@ func (b *Broker) cleanOldLayers() {
 
 // Register a layer to receive messages
 // Note: the registering instance is assumed to be started and accepting messages.
-func (b *Broker) Register(ctx context.Context, id types.LayerID) (chan any, error) {
+func (b *Broker) Register(ctx context.Context, id types.LayerID) (chan runner.MultiMsg, error) {
 	b.setLatestLayer(ctx, id)
 
 	// check to see if the node is still synced
@@ -381,7 +399,7 @@ func (b *Broker) Register(ctx context.Context, id types.LayerID) (chan any, erro
 	return b.createNewInbox(id), nil
 }
 
-func (b *Broker) createNewInbox(id types.LayerID) chan any {
+func (b *Broker) createNewInbox(id types.LayerID) chan runner.MultiMsg {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -393,7 +411,7 @@ func (b *Broker) createNewInbox(id types.LayerID) chan any {
 		b.minDeleted = instance
 		b.With().Info("unregistered layer due to maximum concurrent processes", instance)
 	}
-	outboxCh := make(chan any, inboxCapacity)
+	outboxCh := make(chan runner.MultiMsg, inboxCapacity)
 	b.outbox[id] = outboxCh
 	for _, mOut := range b.pending[id] {
 		outboxCh <- mOut

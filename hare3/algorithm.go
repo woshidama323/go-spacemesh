@@ -134,9 +134,17 @@ func gradeKey5(key []byte) uint8 {
 // actions of message decoding and signature verification and key grading,
 // leaving this handler to handle the decoded message inputs.
 type Handler struct {
-	gc  Gradecaster
 	gg  GradedGossiper
 	tgg TrhesholdGradedGossiper
+	gc  Gradecaster
+}
+
+func NewHandler(gg GradedGossiper, tgg TrhesholdGradedGossiper, gc Gradecaster) *Handler {
+	return &Handler{
+		gg:  gg,
+		tgg: tgg,
+		gc:  gc,
+	}
 }
 
 // HandleMsg handles an incoming message, it returns a boolean indicating
@@ -192,12 +200,20 @@ type Protocol struct {
 	Vi [][]Hash20
 	// Each index "i" holds a map of sets of values from valid proposals
 	// indexed by their hash received in iteration "i"
-	Ti     []map[Hash20][]Hash20
-	Si     []Hash20
-	tgg    TrhesholdGradedGossiper
-	gc     Gradecaster
-	lc     LeaderChecker
-	active bool
+	Ti  []map[Hash20][]Hash20
+	Si  []Hash20
+	tgg TrhesholdGradedGossiper
+	gc  Gradecaster
+	lc  LeaderChecker
+}
+
+func NewProtocol(tgg TrhesholdGradedGossiper, gc Gradecaster, lc LeaderChecker) *Protocol {
+	return &Protocol{
+		round: AbsRound(-1),
+		tgg:   tgg,
+		gc:    gc,
+		lc:    lc,
+	}
 }
 
 func (p *Protocol) Round() AbsRound {
@@ -242,7 +258,9 @@ func isSubset(subset, superset []Hash20) bool {
 	return true
 }
 
-func (p *Protocol) NextRound() (toSend *OutputMessage, output []Hash20) {
+// NextRound processes the next round of the protocol, active indicates whether
+// this participant is active for this round.
+func (p *Protocol) NextRound(active bool) (toSend *OutputMessage, output []Hash20) {
 	defer func() { p.round++ }()
 	if p.round >= 0 && p.round <= 3 {
 		p.Vi[p.round] = p.tgg.RetrieveThresholdMessages(-1, 5-uint8(p.round))
@@ -257,7 +275,7 @@ func (p *Protocol) NextRound() (toSend *OutputMessage, output []Hash20) {
 	j := p.round.Iteration()
 	switch p.round {
 	case -1:
-		if !p.active {
+		if !active {
 			return nil, nil
 		}
 		// Gossip initial values
@@ -288,7 +306,7 @@ func (p *Protocol) NextRound() (toSend *OutputMessage, output []Hash20) {
 		}
 		return nil, nil
 	case 2:
-		if !p.active {
+		if !active {
 			return nil, nil
 		}
 		var set []Hash20
@@ -320,7 +338,7 @@ func (p *Protocol) NextRound() (toSend *OutputMessage, output []Hash20) {
 				p.Ti[j][toHash(c.values)] = c.values
 			}
 		}
-		if !p.active {
+		if !active {
 			return nil, nil
 		}
 
@@ -396,7 +414,7 @@ func (p *Protocol) NextRound() (toSend *OutputMessage, output []Hash20) {
 			}, result
 		}
 		// Case 2
-		if p.active {
+		if active {
 			values := p.tgg.RetrieveThresholdMessages(NewAbsRound(j, 5), 5)
 			setHash, _ := matchInIteration(values, p.Ti, j)
 			return &OutputMessage{

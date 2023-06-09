@@ -41,7 +41,9 @@ func NewHandler(
 	}
 }
 
-// HandleMalfeasanceProof is the gossip receiver for MalfeasanceProof.
+// HandleMalfeasanceProof is the gossip receiver for MalfeasanceProof. Receipt
+// of a known proof results in a return value of pubsub.ValidationIgnore which
+// results in no further gossiping of the message./
 func (h *Handler) HandleMalfeasanceProof(ctx context.Context, peer p2p.Peer, msg []byte) pubsub.ValidationResult {
 	err := h.handleProof(ctx, peer, msg)
 	switch {
