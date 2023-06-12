@@ -42,6 +42,7 @@ type Broker struct {
 	latestLayer    types.LayerID           // the latest layer to attempt register (successfully or unsuccessfully)
 	minDeleted     types.LayerID
 	limit          int // max number of simultaneous consensus processes
+	validator      *syntaxContextValidator
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -71,8 +72,10 @@ func newBroker(
 		latestLayer:   types.GetEffectiveGenesis(),
 		limit:         limit,
 		minDeleted:    types.GetEffectiveGenesis(),
+		validator:     newSyntaxContextValidator(nil, edVerifier, cfg.N/2+1, nil, stateQuerier, roleValidator, nil, nil, log),
 	}
 	b.ctx, b.cancel = context.WithCancel(context.Background())
+
 	return b
 }
 
@@ -192,6 +195,11 @@ func (b *Broker) HandleMessage(ctx context.Context, _ p2p.Peer, msg []byte) erro
 	if !b.roleValidator.Validate(ctx, hareMsg) {
 		logger.Warning("message validation failed: eligibility validator returned false")
 		return errors.New("not eligible")
+	}
+
+	// Validate cert for notify
+	if hareMsg.MsgType() == notifyRound {
+		b.validator.validateCertificate(ctx, hareMsg.Cert)
 	}
 
 	// validation passed, report

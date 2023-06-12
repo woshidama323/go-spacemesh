@@ -44,16 +44,19 @@ import (
 )
 
 type (
-	MsgType            uint8
+	MsgType            int
 	GradedGossipResult uint8
 	Hash20             [20]byte
 )
 
 const (
-	Preround MsgType = iota
-	Propose
-	Commit
-	Notify
+	Preround MsgType = -1
+	HardLock MsgType = 0
+	SoftLock MsgType = 1
+	Propose  MsgType = 2
+
+	Commit MsgType = 5
+	Notify MsgType = 6
 
 	SendValue GradedGossipResult = iota
 	SendEquivocationProof
@@ -279,8 +282,8 @@ func (p *Protocol) NextRound(active bool) (toSend *OutputMessage, output []Hash2
 		p.Li = append(p.Li, nil)
 	}
 	j := p.round.Iteration()
-	switch p.round {
-	case -1:
+	switch p.round.Type() {
+	case Preround:
 		if !active {
 			return nil, nil
 		}
@@ -289,7 +292,7 @@ func (p *Protocol) NextRound(active bool) (toSend *OutputMessage, output []Hash2
 			round:  p.round,
 			values: p.Si,
 		}, nil
-	case 0:
+	case HardLock:
 		if j > 0 {
 			values := p.tgg.RetrieveThresholdMessages(NewAbsRound(j-1, 5), 4)
 			setHash, _ := matchInPreviousIterations(values, p.Ti, j)
@@ -299,7 +302,7 @@ func (p *Protocol) NextRound(active bool) (toSend *OutputMessage, output []Hash2
 
 			}
 		}
-	case 1:
+	case SoftLock:
 		if j > 0 {
 			// If a commit from the previous iteration reached threshold with
 			// at least grade 3 and it's value was added to valid values in any
@@ -311,7 +314,7 @@ func (p *Protocol) NextRound(active bool) (toSend *OutputMessage, output []Hash2
 			}
 		}
 		return nil, nil
-	case 2:
+	case Propose:
 		if !active {
 			return nil, nil
 		}
@@ -333,7 +336,7 @@ func (p *Protocol) NextRound(active bool) (toSend *OutputMessage, output []Hash2
 			round:  p.round,
 			values: set,
 		}, nil
-	case 5:
+	case Commit:
 		candidates := p.gc.RetrieveGradecastedMessages(NewAbsRound(j, 2))
 		for _, c := range candidates {
 			if c.grade < 1 {
@@ -409,7 +412,7 @@ func (p *Protocol) NextRound(active bool) (toSend *OutputMessage, output []Hash2
 			}
 		}
 		return mm, nil
-	case 6:
+	case Notify:
 		// Case 1
 		values := p.tgg.RetrieveThresholdMessages(NewAbsRound(j-1, 6), 5)
 		resultHash, result := matchInPreviousIterations(values, p.Ti, j)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/spacemeshos/go-spacemesh/codec"
 	"github.com/spacemeshos/go-spacemesh/common/types"
+	"github.com/spacemeshos/go-spacemesh/hare/eligibility"
 	"github.com/spacemeshos/go-spacemesh/hash"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/signing"
@@ -89,6 +90,13 @@ type InnerMessage struct {
 	Values         []types.ProposalID  `scale:"max=500"` // the set S. optional for commit InnerMsg in a certificate - expected are 50 proposals per layer + safety margin
 	Svp            *AggregatedMessages // optional. only for proposal Messages
 	Cert           *Certificate        // optional
+}
+
+func (im *InnerMessage) MsgType() uint32 {
+	if im.Round == eligibility.HarePreRound {
+		return im.Round
+	}
+	return im.Round % RoundsPerIteration
 }
 
 // HashBytes returns the message as bytes.
