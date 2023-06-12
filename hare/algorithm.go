@@ -38,35 +38,25 @@ const (
 	notCompleted = false
 )
 
-// procReport is the termination report of the CP.
-type procReport struct {
+// report is the termination report of the CP.
+type report struct {
 	id        types.LayerID // layer id
 	set       *Set          // agreed-upon set
-	coinflip  bool          // weak coin value
 	completed bool          // whether the CP completed
 }
 
-func (cpo procReport) ID() types.LayerID {
-	return cpo.id
-}
-
-func (cpo procReport) Set() *Set {
-	return cpo.set
-}
-
-func (cpo procReport) Coinflip() bool {
-	return cpo.coinflip
-}
-
-func (cpo procReport) Completed() bool {
-	return cpo.completed
-}
-
 func (proc *consensusProcess) report(completed bool) {
-	proc.comm.report <- procReport{proc.layer, proc.value, proc.preRoundTracker.coinflip, completed}
+	proc.comm.report <- report{id: proc.layer, set: proc.value, completed: completed}
 }
 
-var _ TerminationOutput = (*procReport)(nil)
+type wcReport struct {
+	id       types.LayerID
+	coinflip bool
+}
+
+func (proc *consensusProcess) reportWeakCoin() {
+	proc.comm.wc <- wcReport{id: proc.layer, coinflip: proc.preRoundTracker.coinflip}
+}
 
 // State holds the current state of the consensus process (aka the participant).
 type State struct {
@@ -162,7 +152,8 @@ type communication struct {
 	// to this mchOut
 	mchOut chan<- *types.MalfeasanceGossip
 	// if the consensus process terminates, output the result to report
-	report chan TerminationOutput
+	report chan report
+	wc     chan wcReport
 }
 
 // consensusProcess is an entity (a single participant) in the Hare protocol.
@@ -289,7 +280,7 @@ func (proc *consensusProcess) eventLoop() {
 	ctx := proc.ctx
 	logger := proc.WithContext(ctx).WithFields(proc.layer)
 	logger.With().Info("consensus process started",
-		log.String("current_set", proc.value.String()),
+		log.Stringer("current_set", proc.value),
 		log.Int("set_size", proc.value.Size()),
 	)
 
@@ -313,82 +304,83 @@ func (proc *consensusProcess) eventLoop() {
 		return nil
 	})
 
-	// endOfRound := proc.clock.AwaitEndOfRound(preRound)
+	endOfRound := proc.clock.AwaitEndOfRound(preRound)
 
-	// PreRound:
-	// 	for {
-	// 		select {
-	// 		// listen to pre-round Messages
-	// 		case msg := <-proc.comm.inbox:
-	// 			if hmsg, ok := msg.(*Message); ok {
-	// 				proc.handleMessage(ctx, hmsg)
-	// 			} else if emsg, ok := msg.(*types.HareEligibilityGossip); ok {
-	// 				proc.onMalfeasance(emsg)
-	// 			} else {
-	// 				proc.Log.Fatal("unexpected message type")
-	// 			}
-	// 		case <-endOfRound:
-	// 			break PreRound
-	// 		case <-proc.ctx.Done():
-	// 			logger.With().Info("terminating: received signal during preround",
-	// 				log.Uint32("current_round", proc.getRound()))
-	// 			return
-	// 		}
-	// 	}
-	// 	logger.With().Debug("preround ended, filtering preliminary set",
-	// 		log.Int("set_size", proc.value.Size()))
-	// 	proc.preRoundTracker.FilterSet(proc.value)
-	// 	if proc.value.Size() == 0 {
-	// 		logger.Event().Warning("preround ended with empty set")
-	// 	} else {
-	// 		logger.With().Info("preround ended",
-	// 			log.Int("set_size", proc.value.Size()))
-	// 	}
-	// 	proc.advanceToNextRound(ctx) // K was initialized to -1, K should be 0
+PreRound:
+	for {
+		select {
+		// listen to pre-round Messages
+		case msg := <-proc.comm.inbox:
+			if hmsg, ok := msg.(*Message); ok {
+				proc.handleMessage(ctx, hmsg)
+			} else if emsg, ok := msg.(*types.HareEligibilityGossip); ok {
+				proc.onMalfeasance(emsg)
+			} else {
+				proc.Log.Fatal("unexpected message type")
+			}
+		case <-endOfRound:
+			break PreRound
+		case <-proc.ctx.Done():
+			logger.With().Info("terminating: received signal during preround",
+				log.Uint32("current_round", proc.getRound()))
+			return
+		}
+	}
+	logger.With().Debug("preround ended, filtering preliminary set",
+		log.Int("set_size", proc.value.Size()))
+	proc.preRoundTracker.FilterSet(proc.value)
+	if proc.value.Size() == 0 {
+		logger.Event().Warning("preround ended with empty set")
+	} else {
+		logger.With().Info("preround ended",
+			log.Int("set_size", proc.value.Size()))
+	}
+	proc.reportWeakCoin()
+	proc.advanceToNextRound(ctx) // K was initialized to -1, K should be 0
 
-	// 	// start first iteration
-	// 	proc.onRoundBegin(ctx)
-	// 	endOfRound = proc.clock.AwaitEndOfRound(proc.getRound())
+	// start first iteration
+	proc.onRoundBegin(ctx)
+	endOfRound = proc.clock.AwaitEndOfRound(proc.getRound())
 
-	// 	for {
-	// 		select {
-	// 		case msg := <-proc.comm.inbox: // msg event
-	// 			if proc.terminating() {
-	// 				return
-	// 			}
-	// 			if hmsg, ok := msg.(*Message); ok {
-	// 				proc.handleMessage(ctx, hmsg)
-	// 			} else if emsg, ok := msg.(*types.HareEligibilityGossip); ok {
-	// 				proc.onMalfeasance(emsg)
-	// 			} else {
-	// 				proc.Log.Fatal("unexpected message type")
-	// 			}
-	// 		case <-endOfRound: // next round event
-	// 			proc.onRoundEnd(ctx)
-	// 			if proc.terminating() {
-	// 				return
-	// 			}
-	// 			proc.advanceToNextRound(ctx)
+	for {
+		select {
+		case msg := <-proc.comm.inbox: // msg event
+			if proc.terminating() {
+				return
+			}
+			if hmsg, ok := msg.(*Message); ok {
+				proc.handleMessage(ctx, hmsg)
+			} else if emsg, ok := msg.(*types.HareEligibilityGossip); ok {
+				proc.onMalfeasance(emsg)
+			} else {
+				proc.Log.Fatal("unexpected message type")
+			}
+		case <-endOfRound: // next round event
+			proc.onRoundEnd(ctx)
+			if proc.terminating() {
+				return
+			}
+			proc.advanceToNextRound(ctx)
 
-	// 			// exit if we reached the limit on number of iterations
-	// 			round := proc.getRound()
-	// 			if round >= uint32(proc.cfg.LimitIterations)*RoundsPerIteration {
-	// 				logger.With().Warning("terminating: reached iterations limit",
-	// 					log.Int("limit", proc.cfg.LimitIterations),
-	// 					log.Uint32("current_round", round))
-	// 				proc.report(notCompleted)
-	// 				proc.terminate()
-	// 				return
-	// 			}
-	// 			proc.onRoundBegin(ctx)
-	// 			endOfRound = proc.clock.AwaitEndOfRound(round)
+			// exit if we reached the limit on number of iterations
+			round := proc.getRound()
+			if round >= uint32(proc.cfg.LimitIterations)*RoundsPerIteration {
+				logger.With().Warning("terminating: reached iterations limit",
+					log.Int("limit", proc.cfg.LimitIterations),
+					log.Uint32("current_round", round))
+				proc.report(notCompleted)
+				proc.terminate()
+				return
+			}
+			proc.onRoundBegin(ctx)
+			endOfRound = proc.clock.AwaitEndOfRound(round)
 
-	//		case <-proc.ctx.Done(): // close event
-	//			logger.With().Info("terminating: received signal",
-	//				log.Uint32("current_round", proc.getRound()))
-	//			return
-	//		}
-	//	}
+		case <-proc.ctx.Done(): // close event
+			logger.With().Debug("terminating: received signal",
+				log.Uint32("current_round", proc.getRound()))
+			return
+		}
+	}
 }
 
 // handles eligibility proof from hare gossip handler and malfeasance proof gossip handler.
@@ -716,16 +708,16 @@ func (proc *consensusProcess) beginNotifyRound(ctx context.Context) {
 	proc.sendMessage(ctx, notifyMsg)
 }
 
-// passes all pending messages to the inbox of the process so they will be handled.
-// func (proc *consensusProcess) handlePending(pending map[types.NodeID]*Message) {
-// 	for _, m := range pending {
-// 		select {
-// 		case <-proc.ctx.Done():
-// 			return
-// 		case proc.comm.inbox <- m:
-// 		}
-// 	}
-// }
+passes all pending messages to the inbox of the process so they will be handled.
+func (proc *consensusProcess) handlePending(pending map[types.NodeID]*Message) {
+	for _, m := range pending {
+		select {
+		case <-proc.ctx.Done():
+			return
+		case proc.comm.inbox <- m:
+		}
+	}
+}
 
 // runs the logic of the beginning of a round by its type
 // pending messages are passed for handling.

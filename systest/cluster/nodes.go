@@ -12,7 +12,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	apimetav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -182,7 +184,12 @@ func (n *NodeClient) Invoke(ctx context.Context, method string, args any, reply 
 	}
 	err = conn.Invoke(ctx, method, args, reply, opts...)
 	if err != nil {
-		n.resetConn(conn)
+		s, _ := status.FromError(err)
+		if s.Code() != codes.InvalidArgument && s.Code() != codes.Canceled {
+			// check for app error. this is not exhaustive.
+			// the goal is to reset connection if pods were redeployed and changed IP
+			n.resetConn(conn)
+		}
 	}
 	return err
 }
@@ -321,8 +328,7 @@ func deployPoet(ctx *testcontext.Context, id string, flags ...DeploymentFlag) (*
 	return node, nil
 }
 
-func deletePoet(ctx *testcontext.Context, id string) error {
-	errCfg := ctx.Client.CoreV1().ConfigMaps(ctx.Namespace).Delete(ctx, id, apimetav1.DeleteOptions{})
+func deleteServiceAndPod(ctx *testcontext.Context, id string) error {
 	errPod := ctx.Client.AppsV1().Deployments(ctx.Namespace).DeleteCollection(ctx, apimetav1.DeleteOptions{}, apimetav1.ListOptions{LabelSelector: labelSelector(id)})
 	var errSvc error
 	if svcs, err := ctx.Client.CoreV1().Services(ctx.Namespace).List(ctx, apimetav1.ListOptions{LabelSelector: labelSelector(id)}); err == nil {
@@ -332,9 +338,6 @@ func deletePoet(ctx *testcontext.Context, id string) error {
 				errSvc = err
 			}
 		}
-	}
-	if errCfg != nil {
-		return errSvc
 	}
 	if errPod != nil {
 		return errPod
@@ -531,12 +534,12 @@ func deployNode(ctx *testcontext.Context, id string, labels map[string]string, f
 	return nil
 }
 
-func deployBootstrapper(ctx *testcontext.Context, id string, bsEpoch uint32, flags ...DeploymentFlag) (*NodeClient, error) {
+func deployBootstrapper(ctx *testcontext.Context, id string, bsEpochs []int, flags ...DeploymentFlag) (*NodeClient, error) {
 	if _, err := deployBootstrapperSvc(ctx, id); err != nil {
 		return nil, fmt.Errorf("apply poet service: %w", err)
 	}
 
-	node, err := deployBootstrapperD(ctx, id, bsEpoch, flags...)
+	node, err := deployBootstrapperD(ctx, id, bsEpochs, flags...)
 	if err != nil {
 		return nil, err
 	}
@@ -559,10 +562,21 @@ func deployBootstrapperSvc(ctx *testcontext.Context, id string) (*apiv1.Service,
 	return ctx.Client.CoreV1().Services(ctx.Namespace).Apply(ctx, svc, apimetav1.ApplyOptions{FieldManager: "test"})
 }
 
-func deployBootstrapperD(ctx *testcontext.Context, id string, bsEpoch uint32, flags ...DeploymentFlag) (*NodeClient, error) {
+func commaSeparatedList(epochs []int) string {
+	var b strings.Builder
+	for i, e := range epochs {
+		b.WriteString(strconv.Itoa(e))
+		if i < len(epochs)-1 {
+			b.WriteString(",")
+		}
+	}
+	return b.String()
+}
+
+func deployBootstrapperD(ctx *testcontext.Context, id string, bsEpochs []int, flags ...DeploymentFlag) (*NodeClient, error) {
 	cmd := []string{
 		"/bin/go-bootstrapper",
-		strconv.Itoa(int(bsEpoch)),
+		commaSeparatedList(bsEpochs),
 		"--serve-update",
 		"--data-dir=/data/bootstrapper",
 		"--epoch-offset=1",

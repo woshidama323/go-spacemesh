@@ -1,5 +1,6 @@
 package tests
 
+//lint:file-ignore U1000 func waitAll is unused
 import (
 	"context"
 	"errors"
@@ -27,11 +28,14 @@ const (
 	attempts = 3
 )
 
-func sendTransactions(ctx context.Context, eg *errgroup.Group, logger *zap.SugaredLogger, cl *cluster.Cluster, first, stop uint32, batch, amount int) {
-	receiver := types.GenerateAddress([]byte{11, 1, 1})
+func sendTransactions(ctx context.Context, eg *errgroup.Group, logger *zap.SugaredLogger, cl *cluster.Cluster, first, stop uint32, receiver types.Address, batch, amount int) error {
 	for i := 0; i < cl.Accounts(); i++ {
 		i := i
 		client := cl.Client(i % cl.Total())
+		nonce, err := getNonce(ctx, client, cl.Address(i))
+		if err != nil {
+			return fmt.Errorf("get nonce failed (%s:%s): %w", client.Name, cl.Address(i), err)
+		}
 		watchLayers(ctx, eg, client, func(layer *pb.LayerStreamResponse) (bool, error) {
 			if layer.Layer.Number.Number == stop {
 				return false, nil
@@ -44,26 +48,21 @@ func sendTransactions(ctx context.Context, eg *errgroup.Group, logger *zap.Sugar
 			// TODO(dshulyak) introduce api that simply subscribes to internal clock
 			// and outputs events when the tick for the layer is available
 			time.Sleep(200 * time.Millisecond)
-			nonce, err := getNonce(ctx, client, cl.Address(i))
-			if err != nil {
-				return false, fmt.Errorf("get nonce failed (%s:%s): %w", client.Name, cl.Address(i), err)
-			}
 			if nonce == 0 {
-				if logger != nil {
-					logger.Infow("address needs to be spawned", "account", i)
-				}
+				logger.Infow("address needs to be spawned", "account", i)
 				if err := submitSpawn(ctx, cl, i, client); err != nil {
 					return false, fmt.Errorf("failed to spawn %w", err)
 				}
+				nonce++
 				return true, nil
 			}
-			if logger != nil {
-				logger.Debugw("submitting transactions",
-					"layer", layer.Layer.Number.Number,
-					"client", client.Name,
-					"batch", batch,
-				)
-			}
+			logger.Debugw("submitting transactions",
+				"layer", layer.Layer.Number.Number,
+				"client", client.Name,
+				"account", i,
+				"nonce", nonce,
+				"batch", batch,
+			)
 			for j := 0; j < batch; j++ {
 				// in case spawn isn't executed on this particular client
 				retries := 3
@@ -73,18 +72,18 @@ func sendTransactions(ctx context.Context, eg *errgroup.Group, logger *zap.Sugar
 					if err == nil {
 						break
 					}
-					if logger != nil {
-						logger.Warnw("failed to spend", "client", spendClient.Name, "err", err.Error())
-					}
+					logger.Warnw("failed to spend", "client", spendClient.Name, "account", i, "nonce", nonce+uint64(j), "err", err.Error())
 					spendClient = cl.Client((i + k + 1) % cl.Total())
 				}
 				if err != nil {
 					return false, fmt.Errorf("spend failed %s %w", spendClient.Name, err)
 				}
 			}
+			nonce += uint64(batch)
 			return true, nil
 		})
 	}
+	return nil
 }
 
 func submitTransaction(ctx context.Context, tx []byte, node *cluster.NodeClient) ([]byte, error) {
@@ -183,6 +182,27 @@ func waitGenesis(ctx *testcontext.Context, node *cluster.NodeClient) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(genesis.Sub(now)):
+		return nil
+	}
+}
+
+func waitLayer(ctx *testcontext.Context, node *cluster.NodeClient, lid uint32) error {
+	svc := pb.NewMeshServiceClient(node)
+	resp, err := svc.GenesisTime(ctx, &pb.GenesisTimeRequest{})
+	if err != nil {
+		return err
+	}
+	lyrTime := time.Unix(int64(resp.Unixtime.Value), 0).Add(time.Duration(lid) * testcontext.LayerDuration.Get(ctx.Parameters))
+
+	now := time.Now()
+	if !lyrTime.After(now) {
+		return nil
+	}
+	ctx.Log.Debugw("waiting for layer", "now", now, "layer time", lyrTime, "layer", lid)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(lyrTime.Sub(now)):
 		return nil
 	}
 }

@@ -26,40 +26,25 @@ import (
 	smocks "github.com/spacemeshos/go-spacemesh/system/mocks"
 )
 
-type mockReport struct {
-	id       types.LayerID
-	set      *Set
-	c        bool
-	coinflip bool
-}
-
-func (m mockReport) ID() types.LayerID {
-	return m.id
-}
-
-func (m mockReport) Set() *Set {
-	return m.set
-}
-
-func (m mockReport) Completed() bool {
-	return m.c
-}
-
-func (m mockReport) Coinflip() bool {
-	return m.coinflip
-}
-
 type mockConsensusProcess struct {
 	started chan struct{}
-	t       chan TerminationOutput
+	t       chan report
+	w       chan wcReport
 	id      types.LayerID
 	set     *Set
 }
 
 func (mcp *mockConsensusProcess) Run(_ context.Context) ([]hare3.Hash20, error) {
 	close(mcp.started)
-	mcp.t <- mockReport{mcp.id, mcp.set, true, false}
+	mcp.t <- report{id: mcp.id, set: mcp.set, completed: true}
+	mcp.w <- wcReport{id: mcp.id, coinflip: false}
 	return nil, nil
+}
+
+func (mcp *mockConsensusProcess) Stop() {}
+
+func (mcp *mockConsensusProcess) ID() types.LayerID {
+	return mcp.id
 }
 
 func (mcp *mockConsensusProcess) SetInbox(_ any) {
@@ -67,11 +52,12 @@ func (mcp *mockConsensusProcess) SetInbox(_ any) {
 
 var _ Consensus = (*mockConsensusProcess)(nil)
 
-func newMockConsensusProcess(_ config.Config, instanceID types.LayerID, s *Set, _ Rolacle, _ *signing.EdSigner, _ pubsub.Publisher, outputChan chan TerminationOutput, started chan struct{}) *mockConsensusProcess {
+func newMockConsensusProcess(_ config.Config, instanceID types.LayerID, s *Set, _ Rolacle, _ *signing.EdSigner, _ pubsub.Publisher, outputChan chan report, wcChan chan wcReport, started chan struct{}) *mockConsensusProcess {
 	mcp := new(mockConsensusProcess)
 	mcp.started = started
 	mcp.id = instanceID
 	mcp.t = outputChan
+	mcp.w = wcChan
 	mcp.set = s
 	return mcp
 }
@@ -171,7 +157,7 @@ func TestHare_collectOutputAndGetResult(t *testing.T) {
 
 	pids := []types.ProposalID{types.RandomProposalID(), types.RandomProposalID(), types.RandomProposalID()}
 	set := NewSetFromValues(pids...)
-	require.NoError(t, h.collectOutput(context.Background(), mockReport{lyrID, set, true, false}))
+	require.NoError(t, h.collectOutput(context.Background(), report{id: lyrID, set: set, completed: true}))
 	lo := <-h.blockGenCh
 	require.Equal(t, lyrID, lo.Layer)
 	require.ElementsMatch(t, pids, lo.Proposals)
@@ -197,7 +183,7 @@ func TestHare_collectOutputGetResult_TerminateTooLate(t *testing.T) {
 
 	pids := []types.ProposalID{types.RandomProposalID(), types.RandomProposalID(), types.RandomProposalID()}
 	set := NewSetFromValues(pids...)
-	err = h.collectOutput(context.Background(), mockReport{lyrID, set, true, false})
+	err = h.collectOutput(context.Background(), report{id: lyrID, set: set, completed: true})
 	require.Equal(t, ErrTooLate, err)
 	lo := <-h.blockGenCh
 	require.Equal(t, lyrID, lo.Layer)
@@ -214,16 +200,19 @@ func TestHare_OutputCollectionLoop(t *testing.T) {
 	require.NoError(t, h.Start(context.Background()))
 
 	lyrID := types.LayerID(8)
-	mo := mockReport{lyrID, NewEmptySet(0), true, false}
-	_, err := h.broker.Register(context.Background(), mo.ID())
+	_, err := h.broker.Register(context.Background(), lyrID)
 	require.NoError(t, err)
 	time.Sleep(1 * time.Second)
 
-	h.mockCoin.EXPECT().Set(lyrID, mo.Coinflip())
-	h.outputChan <- mo
+	h.mockCoin.EXPECT().Set(lyrID, false)
+	h.wcChan <- wcReport{id: lyrID, coinflip: false}
+	h.outputChan <- report{id: lyrID, set: NewEmptySet(0), completed: true}
 	lo := <-h.blockGenCh
 	require.Equal(t, lyrID, lo.Layer)
 	require.Empty(t, lo.Proposals)
+	require.Eventually(t, func() bool {
+		return len(h.wcChan) == 0
+	}, time.Second, 100*time.Millisecond)
 }
 
 func TestHare_malfeasanceLoop(t *testing.T) {
@@ -309,7 +298,7 @@ func TestHare_onTick(t *testing.T) {
 	startedChan := make(chan struct{}, 1)
 	var nmcp *mockConsensusProcess
 	h.factory = func(ctx context.Context, cfg config.Config, instanceId types.LayerID, s *Set, oracle Rolacle, sig *signing.EdSigner, _ *types.VRFPostIndex, p2p pubsub.Publisher, comm communication, clock RoundClock) Consensus {
-		nmcp = newMockConsensusProcess(cfg, instanceId, s, oracle, sig, p2p, comm.report, startedChan)
+		nmcp = newMockConsensusProcess(cfg, instanceId, s, oracle, sig, p2p, comm.report, comm.wc, startedChan)
 		close(createdChan)
 		return nmcp
 	}
@@ -380,7 +369,7 @@ func TestHare_onTick_notMining(t *testing.T) {
 	startedChan := make(chan struct{}, 1)
 	var nmcp *mockConsensusProcess
 	h.factory = func(ctx context.Context, cfg config.Config, instanceId types.LayerID, s *Set, oracle Rolacle, sig *signing.EdSigner, _ *types.VRFPostIndex, p2p pubsub.Publisher, comm communication, clock RoundClock) Consensus {
-		nmcp = newMockConsensusProcess(cfg, instanceId, s, oracle, sig, p2p, comm.report, startedChan)
+		nmcp = newMockConsensusProcess(cfg, instanceId, s, oracle, sig, p2p, comm.report, comm.wc, startedChan)
 		close(createdChan)
 		return nmcp
 	}
@@ -439,22 +428,21 @@ func TestHare_onTick_NotSynced(t *testing.T) {
 	lyr := types.LayerID(199)
 
 	h := createTestHare(t, newMockMesh(t), config.DefaultConfig(), newMockClock(), noopPubSub(t), t.Name())
-	h.mockRoracle.EXPECT().IsIdentityActiveOnConsensusView(gomock.Any(), gomock.Any(), lyr).Return(true, nil).AnyTimes()
 	mockSyncS := smocks.NewMockSyncStateProvider(gomock.NewController(t))
 	h.broker.nodeSyncState = mockSyncS
 	h.broker.Start(context.Background())
-	defer h.broker.Close()
 
-	mockSyncS.EXPECT().IsSynced(gomock.Any()).Return(false)
+	mockSyncS.EXPECT().IsSynced(gomock.Any()).Return(false).Times(2)
 	started, err := h.onTick(context.Background(), lyr)
 	require.NoError(t, err)
 	require.False(t, started)
 
-	mockSyncS.EXPECT().IsSynced(gomock.Any()).Return(true)
-	mockSyncS.EXPECT().IsBeaconSynced(gomock.Any()).Return(false)
+	mockSyncS.EXPECT().IsSynced(gomock.Any()).Return(true).Times(2)
+	mockSyncS.EXPECT().IsBeaconSynced(gomock.Any()).Return(false).Times(2)
 	started, err = h.onTick(context.Background(), lyr)
 	require.NoError(t, err)
 	require.False(t, started)
+	h.Close()
 }
 
 func TestHare_goodProposal(t *testing.T) {
@@ -531,7 +519,7 @@ func TestHare_goodProposal(t *testing.T) {
 			for _, i := range tc.expected {
 				expected = append(expected, pList[i].ID())
 			}
-			got := goodProposals(logtest.New(t), mockMesh, nodeID, lyrID, nodeBeacon)
+			got := goodProposals(context.Background(), logtest.New(t), mockMesh, nodeID, lyrID, nodeBeacon)
 			require.ElementsMatch(t, expected, got)
 		})
 	}
@@ -543,7 +531,7 @@ func TestHare_outputBuffer(t *testing.T) {
 	for i := uint32(1); i <= h.config.Hdist; i++ {
 		lyr = types.GetEffectiveGenesis().Add(i)
 		h.setLastLayer(lyr)
-		require.NoError(t, h.collectOutput(context.Background(), mockReport{lyr, NewEmptySet(0), true, false}))
+		require.NoError(t, h.collectOutput(context.Background(), report{id: lyr, set: NewEmptySet(0), completed: true}))
 		_, ok := h.outputs[lyr]
 		require.True(t, ok)
 		require.EqualValues(t, i, len(h.outputs))
@@ -554,7 +542,7 @@ func TestHare_outputBuffer(t *testing.T) {
 	// add another output
 	lyr = lyr.Add(1)
 	h.setLastLayer(lyr)
-	require.NoError(t, h.collectOutput(context.Background(), mockReport{lyr, NewEmptySet(0), true, false}))
+	require.NoError(t, h.collectOutput(context.Background(), report{id: lyr, set: NewEmptySet(0), completed: true}))
 	_, ok := h.outputs[lyr]
 	require.True(t, ok)
 	require.EqualValues(t, h.config.Hdist, len(h.outputs))
@@ -570,7 +558,7 @@ func TestHare_IsTooLate(t *testing.T) {
 	for i := uint32(1); i <= h.config.Hdist*2; i++ {
 		lyr = types.GetEffectiveGenesis().Add(i)
 		h.setLastLayer(lyr)
-		_ = h.collectOutput(context.Background(), mockReport{lyr, NewEmptySet(0), true, false})
+		_ = h.collectOutput(context.Background(), report{id: lyr, set: NewEmptySet(0), completed: true})
 		_, ok := h.outputs[lyr]
 		require.True(t, ok)
 		if i < h.config.Hdist {
@@ -593,7 +581,7 @@ func TestHare_oldestInBuffer(t *testing.T) {
 	for i := uint32(1); i <= h.config.Hdist; i++ {
 		lyr = types.GetEffectiveGenesis().Add(i)
 		h.setLastLayer(lyr)
-		require.NoError(t, h.collectOutput(context.Background(), mockReport{lyr, NewEmptySet(0), true, false}))
+		require.NoError(t, h.collectOutput(context.Background(), report{id: lyr, set: NewEmptySet(0), completed: true}))
 		_, ok := h.outputs[lyr]
 		require.True(t, ok)
 		require.EqualValues(t, i, len(h.outputs))
@@ -603,7 +591,7 @@ func TestHare_oldestInBuffer(t *testing.T) {
 
 	lyr = lyr.Add(1)
 	h.setLastLayer(lyr)
-	require.NoError(t, h.collectOutput(context.Background(), mockReport{lyr, NewEmptySet(0), true, false}))
+	require.NoError(t, h.collectOutput(context.Background(), report{id: lyr, set: NewEmptySet(0), completed: true}))
 	_, ok := h.outputs[lyr]
 	require.True(t, ok)
 	require.EqualValues(t, h.config.Hdist, len(h.outputs))
@@ -612,7 +600,7 @@ func TestHare_oldestInBuffer(t *testing.T) {
 
 	lyr = lyr.Add(2)
 	h.setLastLayer(lyr)
-	require.NoError(t, h.collectOutput(context.Background(), mockReport{lyr, NewEmptySet(0), true, false}))
+	require.NoError(t, h.collectOutput(context.Background(), report{id: lyr, set: NewEmptySet(0), completed: true}))
 	_, ok = h.outputs[lyr]
 	require.True(t, ok)
 	require.EqualValues(t, h.config.Hdist, len(h.outputs))
@@ -644,21 +632,25 @@ func TestHare_WeakCoin(t *testing.T) {
 
 	// complete + coin flip true
 	h.mockCoin.EXPECT().Set(layerID, true)
-	h.outputChan <- mockReport{layerID, set, true, true}
+	h.outputChan <- report{id: layerID, set: set, completed: true}
+	h.wcChan <- wcReport{id: layerID, coinflip: true}
 	require.NoError(t, waitForMsg())
 
 	// incomplete + coin flip true
 	h.mockCoin.EXPECT().Set(layerID, true)
-	h.outputChan <- mockReport{layerID, set, false, true}
+	h.outputChan <- report{id: layerID, set: set, completed: false}
+	h.wcChan <- wcReport{id: layerID, coinflip: true}
 	require.Error(t, waitForMsg())
 
 	// complete + coin flip false
 	h.mockCoin.EXPECT().Set(layerID, false)
-	h.outputChan <- mockReport{layerID, set, true, false}
+	h.outputChan <- report{id: layerID, set: set, completed: true}
+	h.wcChan <- wcReport{id: layerID, coinflip: false}
 	require.NoError(t, waitForMsg())
 
 	// incomplete + coin flip false
 	h.mockCoin.EXPECT().Set(layerID, false)
-	h.outputChan <- mockReport{layerID, set, false, false}
+	h.outputChan <- report{id: layerID, set: set, completed: false}
+	h.wcChan <- wcReport{id: layerID, coinflip: false}
 	require.Error(t, waitForMsg())
 }

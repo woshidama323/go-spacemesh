@@ -31,17 +31,17 @@ type Broker struct {
 	mu sync.RWMutex
 
 	consensusMutex *sync.Mutex
-	msh           mesh
-	edVerifier    *signing.EdVerifier
-	roleValidator validator                // provides eligibility validation
-	stateQuerier  stateQuerier             // provides activeness check
-	nodeSyncState system.SyncStateProvider // provider function to check if the node is currently synced
-	mchOut        chan<- *types.MalfeasanceGossip
-	outbox        map[types.LayerID]*hare3.Handler
-	pending       map[types.LayerID][] // the buffer of pending early messages for the next layer
-	latestLayer   types.LayerID                          // the latest layer to attempt register (successfully or unsuccessfully)
-	minDeleted    types.LayerID
-	limit         int // max number of simultaneous consensus processes
+	msh            mesh
+	edVerifier     *signing.EdVerifier
+	roleValidator  validator                // provides eligibility validation
+	stateQuerier   stateQuerier             // provides activeness check
+	nodeSyncState  system.SyncStateProvider // provider function to check if the node is currently synced
+	mchOut         chan<- *types.MalfeasanceGossip
+	outbox         map[types.LayerID]*hare3.Handler
+	pending        map[types.LayerID][]any // the buffer of pending early messages for the next layer
+	latestLayer    types.LayerID           // the latest layer to attempt register (successfully or unsuccessfully)
+	minDeleted     types.LayerID
+	limit          int // max number of simultaneous consensus processes
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -124,34 +124,28 @@ func (b *Broker) validateTiming(ctx context.Context, m *Message) error {
 	return fmt.Errorf("%w: msg %v, latest %v", errFutureMsg, msgInstID, latestLayer)
 }
 
-// HandleMessage separate listener routine that receives gossip messages and adds them to the priority queue.
-func (b *Broker) HandleMessage(ctx context.Context, _ p2p.Peer, msg []byte) pubsub.ValidationResult {
-	select {
-	case <-ctx.Done():
-		return pubsub.ValidationIgnore
-	case <-b.ctx.Done():
-		return pubsub.ValidationIgnore
-	default:
-		if err := b.handleMessage(ctx, msg); err != nil {
-			return pubsub.ValidationIgnore
-		}
-	}
-	return pubsub.ValidationAccept
-}
-
 func toMsg(msg *Message) runner.MultiMsg {
 	values := make([]hare3.Hash20, len(msg.Values))
 	for i := range msg.Values {
 		values[i] = hare3.Hash20(msg.Values[i])
 	}
-	return  runner.Msg{
+	return runner.Msg{
 		Key:    msg.SmesherID[:],
 		Values: values,
 		Round:  int8(msg.Round),
 	}
 }
 
-func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
+// HandleMessage separate listener routine that receives gossip messages and adds them to the priority queue.
+func (b *Broker) HandleMessage(ctx context.Context, _ p2p.Peer, msg []byte) error {
+	select {
+	case <-ctx.Done():
+		return errClosed
+	case <-b.ctx.Done():
+		return errClosed
+	default:
+	}
+
 	h := types.CalcMessageHash12(msg, pubsub.HareProtocol)
 	logger := b.WithContext(ctx).WithFields(log.Stringer("latest_layer", b.getLatestLayer()), h)
 	hareMsg, err := MessageFromBuffer(msg)
@@ -173,10 +167,10 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 	}
 	handler, ok := b.outbox[msgLayer]
 	if !ok {
-		if msgLayer != b.latestLayer + 1 {
+		if msgLayer != b.latestLayer+1 {
 			logger.With().Debug("broker received a message to a consensus process that is not registered",
 				msgLayer.Field())
-				return errors.New("consensus process not registered")
+			return errors.New("consensus process not registered")
 		}
 		logger.With().Debug("early message detected", msgLayer.Field())
 		// TODO early
@@ -203,7 +197,6 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 	// validation passed, report
 	logger.With().Debug("broker reported hare message as valid")
 	m := toMsg(hareMsg)
-
 
 	// TODO Ok we can simulate this by calling the handler twice with a fake
 	// message with different value for the second message. But then if there
@@ -261,9 +254,6 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 	if !forward {
 		return errors.New("don't foward message")
 	}
-
-	
-
 
 	return nil
 }
