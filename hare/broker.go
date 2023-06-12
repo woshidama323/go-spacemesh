@@ -204,9 +204,6 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 	logger.With().Debug("broker reported hare message as valid")
 	m := toMsg(hareMsg)
 
-	handler.HandleMsg(m.Key, m.Values, m.Round)
-
-	
 
 	// TODO Ok we can simulate this by calling the handler twice with a fake
 	// message with different value for the second message. But then if there
@@ -230,27 +227,43 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 	// Eligibility they have. So the real issue here is there doesn't seem to
 	// be any guarantee that nodes will share the same view of the malicious
 	// parties in the mesh. Also storing MalfeasanceProofs is gonna get large.
+	//
+	// Ok ok i think i got this now, I've updated the handler to treat messages
+	// with nil values as equivocation proofs, so we send the message to the
+	// hanler with nil values and we will forward the original message to the
+	// network otherwise other nodes will not do the same.
 
-	// if proof, err := b.msh.GetMalfeasanceProof(hareMsg.SmesherID); err != nil && !errors.Is(err, sql.ErrNotFound) {
-	// 	logger.With().Error("failed to check malicious identity",
-	// 		log.Stringer("smesher", hareMsg.SmesherID),
-	// 		log.Err(err),
-	// 	)
-	// 	return err
-	// } else if proof != nil {
-	// 	// when hare receives a hare gossip from a malicious identity,
-	// 	// - gossip its malfeasance + eligibility proofs to the network
-	// 	// - relay the eligibility proof to the consensus process
-	// 	// - return error so the node don't relay messages from malicious parties
-	// 	if err := b.handleMaliciousHareMessage(ctx, logger, hareMsg.SmesherID, proof, hareMsg, isEarly); err != nil {
-	// 		return err
-	// 	}
-	// 	return fmt.Errorf("known malicious %v", hareMsg.SmesherID.String())
-	// }
+	// In the case of a malicious message we set the values to nil
+	values := m.Values
+	if proof, err := b.msh.GetMalfeasanceProof(hareMsg.SmesherID); err != nil && !errors.Is(err, sql.ErrNotFound) {
+		logger.With().Error("failed to check malicious identity",
+			log.Stringer("smesher", hareMsg.SmesherID),
+			log.Err(err),
+		)
+		return err
+	} else if proof != nil {
+		values = nil
+		// // when hare receives a hare gossip from a malicious identity,
+		// // - gossip its malfeasance + eligibility proofs to the network
+		// // - relay the eligibility proof to the consensus process
+		// // - return error so the node don't relay messages from malicious parties
+		// if err := b.handleMaliciousHareMessage(ctx, logger, hareMsg.SmesherID, proof, hareMsg, isEarly); err != nil {
+		// 	return err
+		// }
+		// return fmt.Errorf("known malicious %v", hareMsg.SmesherID.String())
+	}
 
 	// if isEarly {
 	// 	return b.handleEarlyMessage(logger, msgLayer, hareMsg.SmesherID, mm)
 	// }
+
+	forward := handler.HandleMsg(m.Key, values, m.Round)
+	if !forward {
+		return errors.New("don't foward message")
+	}
+
+	
+
 
 	return nil
 }
