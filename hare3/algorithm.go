@@ -161,19 +161,29 @@ func (h *Handler) HandleMsg(vk []byte, values []Hash20, round int8) bool {
 	id := hashBytes(vk)
 	valuesHash := toHash(values)
 
+	regossip := true
 	var gradedGossipValues []Hash20
-	result := h.gg.ReceiveMsg(id, valuesHash, r, g)
-	switch result {
-	case DropMessage:
-		// Indicates prior equivocation, drop the message.
-		return false
-	case SendEquivocationProof:
-		// Indicates new instance of equivocation notify gradcast or threshold
-		// gossip with nil values.
-		gradedGossipValues = nil
-	case SendValue:
-		// Indicates valid message, set values to message values.
-		gradedGossipValues = values
+	// Nil values signifies a message from a known malicious actor, however we
+	// need to return false in this case to avoid gossiping the message to the
+	// rest of the network.
+	if values != nil {
+		result := h.gg.ReceiveMsg(id, valuesHash, r, g)
+		switch result {
+		case DropMessage:
+			// Indicates prior equivocation, drop the message.
+			return false
+		case SendEquivocationProof:
+			// Indicates new instance of equivocation notify gradecast or threshold
+			// gossip with nil values.
+			gradedGossipValues = nil
+		case SendValue:
+			// Indicates valid message, set values to message values.
+			gradedGossipValues = values
+		}
+	} else {
+		// we received a message from a prior, known equivocator, participants should already know about this eqivocator since the eqivocation proof should have been synced to them, so we do not forward the
+		// Hang on we need to forward this messgage since otherwise they may not add the equivocation proof to their protocols, phew, that makes things a lot easier.
+		regossip = false
 	}
 
 	// Pass results to gradecast or threshold gossip.
