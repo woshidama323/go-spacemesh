@@ -30,15 +30,16 @@ type Broker struct {
 	log.Log
 	mu sync.RWMutex
 
+	consensusMutex *sync.Mutex
 	msh           mesh
 	edVerifier    *signing.EdVerifier
 	roleValidator validator                // provides eligibility validation
 	stateQuerier  stateQuerier             // provides activeness check
 	nodeSyncState system.SyncStateProvider // provider function to check if the node is currently synced
 	mchOut        chan<- *types.MalfeasanceGossip
-	outbox        map[types.LayerID]chan runner.MultiMsg
-	pending       map[types.LayerID][]runner.MultiMsg // the buffer of pending early messages for the next layer
-	latestLayer   types.LayerID                       // the latest layer to attempt register (successfully or unsuccessfully)
+	outbox        map[types.LayerID]*hare3.Handler
+	pending       map[types.LayerID][] // the buffer of pending early messages for the next layer
+	latestLayer   types.LayerID                          // the latest layer to attempt register (successfully or unsuccessfully)
 	minDeleted    types.LayerID
 	limit         int // max number of simultaneous consensus processes
 
@@ -65,8 +66,8 @@ func newBroker(
 		stateQuerier:  stateQuerier,
 		nodeSyncState: syncState,
 		mchOut:        mch,
-		outbox:        make(map[types.LayerID]chan runner.MultiMsg),
-		pending:       make(map[types.LayerID][]runner.MultiMsg),
+		outbox:        make(map[types.LayerID]chan runner.MsgEnvelope),
+		pending:       make(map[types.LayerID][]runner.MsgEnvelope),
 		latestLayer:   types.GetEffectiveGenesis(),
 		limit:         limit,
 		minDeleted:    types.GetEffectiveGenesis(),
@@ -138,18 +139,15 @@ func (b *Broker) HandleMessage(ctx context.Context, _ p2p.Peer, msg []byte) pubs
 	return pubsub.ValidationAccept
 }
 
-func toMultiMsg(raw []byte, msg *Message) runner.MultiMsg {
+func toMsg(msg *Message) runner.MultiMsg {
 	values := make([]hare3.Hash20, len(msg.Values))
 	for i := range msg.Values {
 		values[i] = hare3.Hash20(msg.Values[i])
 	}
-	return runner.MultiMsg{
-		RawMessage: raw,
-		Message: runner.Msg{
-			Key:    msg.SmesherID[:],
-			Values: values,
-			Round:  int8(msg.Round),
-		},
+	return  runner.Msg{
+		Key:    msg.SmesherID[:],
+		Values: values,
+		Round:  int8(msg.Round),
 	}
 }
 
@@ -161,8 +159,6 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 		logger.With().Error("failed to build message", h, log.Err(err))
 		return err
 	}
-	mm := toMultiMsg(msg, hareMsg)
-	logger = logger.WithFields(log.Inline(hareMsg))
 
 	if hareMsg.InnerMessage == nil {
 		logger.With().Warning("hare msg missing inner msg", log.Err(errNilInner))
@@ -175,18 +171,15 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 	if !b.Synced(ctx, msgLayer) {
 		return errNotSynced
 	}
-
-	isEarly := false
-	if err := b.validateTiming(ctx, hareMsg); err != nil {
-		if !errors.Is(err, errEarlyMsg) {
-			// not early, validation failed
+	handler, ok := b.outbox[msgLayer]
+	if !ok {
+		if msgLayer != b.latestLayer + 1 {
 			logger.With().Debug("broker received a message to a consensus process that is not registered",
-				log.Err(err))
-			return err
+				msgLayer.Field())
+				return errors.New("consensus process not registered")
 		}
-
-		logger.With().Debug("early message detected", log.Err(err))
-		isEarly = true
+		logger.With().Debug("early message detected", msgLayer.Field())
+		// TODO early
 	}
 
 	if !b.edVerifier.Verify(signing.HARE, hareMsg.SmesherID, hareMsg.SignedBytes(), hareMsg.Signature) {
@@ -209,43 +202,56 @@ func (b *Broker) handleMessage(ctx context.Context, msg []byte) error {
 
 	// validation passed, report
 	logger.With().Debug("broker reported hare message as valid")
+	m := toMsg(hareMsg)
 
-	if proof, err := b.msh.GetMalfeasanceProof(hareMsg.SmesherID); err != nil && !errors.Is(err, sql.ErrNotFound) {
-		logger.With().Error("failed to check malicious identity",
-			log.Stringer("smesher", hareMsg.SmesherID),
-			log.Err(err),
-		)
-		return err
-	} else if proof != nil {
-		// when hare receives a hare gossip from a malicious identity,
-		// - gossip its malfeasance + eligibility proofs to the network
-		// - relay the eligibility proof to the consensus process
-		// - return error so the node don't relay messages from malicious parties
-		if err := b.handleMaliciousHareMessage(ctx, logger, hareMsg.SmesherID, proof, hareMsg, isEarly); err != nil {
-			return err
-		}
-		return fmt.Errorf("known malicious %v", hareMsg.SmesherID.String())
-	}
+	handler.HandleMsg(m.Key, m.Values, m.Round)
 
-	if isEarly {
-		return b.handleEarlyMessage(logger, msgLayer, hareMsg.SmesherID, mm)
-	}
+	
 
-	// has instance, just send
-	out := b.getInbox(msgLayer)
-	if out == nil {
-		logger.With().Debug("missing broker instance for layer", msgLayer)
-		return errTooOld
-	}
-	logger.With().Debug("broker forwarding message to outbox",
-		log.Int("queue_size", len(out)))
-	select {
-	case out <- mm:
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-b.ctx.Done():
-		return errClosed
-	}
+	// TODO Ok we can simulate this by calling the handler twice with a fake
+	// message with different value for the second message. But then if there
+	// is real equivocation then that message wont be relayed and then the rest
+	// of the network won't get to know about the equivocation... So what
+	// happens now, we see we have a proof in the mesh and we try to relay (but
+	// fail) the proof to the network, we do however include this message
+	// sender into the set of eligible entities as a known equiviocator, this
+	// means that they contribute towards the k of the >= f+1-k formula. This
+	// works as long as everyone has the same mesh, but if not then this is
+	// quite broken. Because when you subtract from the threshold it allows
+	// values with less support to prevail. So if nodes are not in sync about
+	// who is malicious then they won't reach agreement. It seems that the
+	// malfeasance proofsa are synced, but not actually agreed upon, so it's
+	// not clear to me that this is a reliable approach. Additionally the
+	// attempt to gossip the malfeasance to the network when receiving a
+	// message from the peer could result in potentially flodding the network,
+	// but that's probably handled by the gossip although actually the message
+	// will differ because of the HareEligibilityGossip, can a malicious node
+	// take advantage of that/ no so they can cause gossiping once for each
+	// Eligibility they have. So the real issue here is there doesn't seem to
+	// be any guarantee that nodes will share the same view of the malicious
+	// parties in the mesh. Also storing MalfeasanceProofs is gonna get large.
+
+	// if proof, err := b.msh.GetMalfeasanceProof(hareMsg.SmesherID); err != nil && !errors.Is(err, sql.ErrNotFound) {
+	// 	logger.With().Error("failed to check malicious identity",
+	// 		log.Stringer("smesher", hareMsg.SmesherID),
+	// 		log.Err(err),
+	// 	)
+	// 	return err
+	// } else if proof != nil {
+	// 	// when hare receives a hare gossip from a malicious identity,
+	// 	// - gossip its malfeasance + eligibility proofs to the network
+	// 	// - relay the eligibility proof to the consensus process
+	// 	// - return error so the node don't relay messages from malicious parties
+	// 	if err := b.handleMaliciousHareMessage(ctx, logger, hareMsg.SmesherID, proof, hareMsg, isEarly); err != nil {
+	// 		return err
+	// 	}
+	// 	return fmt.Errorf("known malicious %v", hareMsg.SmesherID.String())
+	// }
+
+	// if isEarly {
+	// 	return b.handleEarlyMessage(logger, msgLayer, hareMsg.SmesherID, mm)
+	// }
+
 	return nil
 }
 
@@ -389,7 +395,7 @@ func (b *Broker) cleanOldLayers() {
 
 // Register a layer to receive messages
 // Note: the registering instance is assumed to be started and accepting messages.
-func (b *Broker) Register(ctx context.Context, id types.LayerID) (chan runner.MultiMsg, error) {
+func (b *Broker) Register(ctx context.Context, id types.LayerID, handler hare3.Handler) error {
 	b.setLatestLayer(ctx, id)
 
 	// check to see if the node is still synced

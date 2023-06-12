@@ -12,8 +12,7 @@ type ProtocolRunner struct {
 	clock    RoundClock
 	protocol hare3.Protocol
 	maxRound hare3.AbsRound
-	handler  *hare3.Handler
-	messages chan MultiMsg
+	messages chan MsgEnvelope
 	gossiper NetworkGossiper
 }
 
@@ -21,15 +20,13 @@ func NewProtocolRunner(
 	clock RoundClock,
 	protocol *hare3.Protocol,
 	iterationLimit int8,
-	handler *hare3.Handler,
-	messages chan MultiMsg,
+	messages chan MsgEnvelope,
 	gossiper NetworkGossiper,
 ) *ProtocolRunner {
 	return &ProtocolRunner{
 		clock:    clock,
 		protocol: *protocol,
 		maxRound: hare3.NewAbsRound(iterationLimit, 0),
-		handler:  handler,
 		messages: messages,
 		gossiper: gossiper,
 	}
@@ -37,6 +34,7 @@ func NewProtocolRunner(
 
 // Run waits for successive rounds from the clock and handles messages received from the network
 func (r *ProtocolRunner) Run(ctx context.Context) ([]hare3.Hash20, error) {
+	// ok want to actually use a lock here
 	for {
 		if r.protocol.Round() == r.maxRound {
 			return nil, fmt.Errorf("hare protocol runner exceeded iteration limit of %d", r.maxRound.Iteration())
@@ -58,17 +56,16 @@ func (r *ProtocolRunner) Run(ctx context.Context) ([]hare3.Hash20, error) {
 			if output != nil {
 				return output, nil
 			}
-		case multiMsg := <-r.messages:
+		case envelope := <-r.messages:
 			// It is assumed that messages received here have had their
 			// signature verified by the broker and that the broker made use of
 			// the message sid to route the message to this instance.
-			m := multiMsg.Message
-			if r.handler.HandleMsg(m.Key, m.Values, m.Round) {
-				// Send raw message to peers
-				err := r.gossiper.Gossip(multiMsg.RawMessage)
-				if err != nil {
-					logerr(err)
-				}
+			m := envelope.Message
+			select {
+			// Communicate back to the broker whether or not the message should be gossiped.
+			case envelope.Gossip <- r.handler.HandleMsg(m.Key, m.Values, m.Round):
+			case <-ctx.Done():
+				return nil, ctx.Err()
 			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -76,9 +73,9 @@ func (r *ProtocolRunner) Run(ctx context.Context) ([]hare3.Hash20, error) {
 	}
 }
 
-type MultiMsg struct {
-	RawMessage []byte
-	Message    Msg
+type MsgEnvelope struct {
+	Gossip  chan<- bool
+	Message Msg
 }
 
 type Msg struct {
