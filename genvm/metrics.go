@@ -125,13 +125,13 @@ var (
 	rewardsCount = metrics.NewCounter(
 		"rewards",
 		namespace,
-		"Total rewards including issuence and fees",
+		"Total rewards including issuance and fees",
 		[]string{},
 	).WithLabelValues()
 	burntCount = metrics.NewCounter(
 		"rewards_burn",
 		namespace,
-		"Burnt amount of issuence and fees",
+		"Burnt amount of issuance and fees",
 		[]string{},
 	).WithLabelValues()
 )
