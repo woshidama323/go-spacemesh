@@ -462,7 +462,7 @@ func goodProposals(ctx context.Context, logger log.Log, msh mesh, nodeID types.N
 	)
 	// a non-smesher will not filter out any proposals, as it doesn't have voting power
 	// and only observes the consensus process.
-	ownHdr, err = msh.GetEpochAtx(lid.GetEpoch(), nodeID)
+	ownHdr, err = msh.GetEpochAtx(lid.GetEpoch()-1, nodeID)
 	if err != nil && !errors.Is(err, sql.ErrNotFound) {
 		logger.With().Error("failed to get own atx", log.Context(ctx), lid, log.Err(err))
 		return []types.ProposalID{}
