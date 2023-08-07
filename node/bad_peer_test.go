@@ -26,6 +26,7 @@ import (
 	postCfg "github.com/spacemeshos/post/config"
 	"github.com/spacemeshos/post/initialization"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -146,7 +147,8 @@ func TestPeerDisconnectForMessageResultValidationReject(t *testing.T) {
 }
 
 func TestConsensus(t *testing.T) {
-	t.SkipNow()
+	defer goleak.VerifyNone(t)
+	// t.SkipNow()
 	spew.Config.DisableMethods = true
 	// cfg := fastnet()
 	cfg := conf()
@@ -252,6 +254,11 @@ func NewNetwork(conf config.Config, l log.Log, size int) ([]*TestApp, func() err
 		cancel()
 		// Wait for nodes to shutdown
 		g.Wait()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+		for _, a := range apps {
+			a.Cleanup(ctx)
+		}
 		// Clean their datadirs
 		for _, d := range datadirs {
 			err := os.RemoveAll(d)

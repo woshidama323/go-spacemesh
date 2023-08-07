@@ -48,6 +48,7 @@ require (
 	github.com/stretchr/testify v1.8.4
 	github.com/zeebo/blake3 v0.2.3
 	go.uber.org/atomic v1.11.0
+	go.uber.org/goleak v1.2.0
 	go.uber.org/zap v1.24.0
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
 	golang.org/x/sync v0.3.0

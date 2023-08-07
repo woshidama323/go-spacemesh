@@ -248,6 +248,7 @@ func (s *Syncer) Start() {
 				select {
 				case <-ctx.Done():
 					return nil
+					// seems like this is not getting shutdown when i shutdonwn the node and the validateTimer ticks and then there's no data for processLayers
 				case <-s.validateTimer.C:
 					if err := s.processLayers(ctx); err != nil {
 						sRunFail.Inc()
