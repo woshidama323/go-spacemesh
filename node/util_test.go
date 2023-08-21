@@ -46,9 +46,9 @@ func NewTestNetwork(t *testing.T, conf config.Config, l log.Log, size int) []*Te
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 		for _, a := range apps {
+			a.Host().Close()
 			a.Cleanup(ctx)
 		}
-		time.Sleep(time.Second * 5)
 	})
 
 	for i := 0; i < size; i++ {
