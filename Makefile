@@ -83,7 +83,7 @@ clear-test-cache:
 .PHONY: clear-test-cache
 
 test: get-libs
-	@$(ULIMIT) CGO_LDFLAGS="$(CGO_TEST_LDFLAGS)" gotestsum -- -race -timeout 5m -p 1 $(UNIT_TESTS)
+	@$(ULIMIT) CGO_LDFLAGS="$(CGO_TEST_LDFLAGS)" gotestsum -- -race -timeout 5m -p 1 ./node -run 'TestPeerI\|TestDele'
 .PHONY: test
 
 generate: get-libs

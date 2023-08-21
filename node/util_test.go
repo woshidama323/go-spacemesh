@@ -48,6 +48,7 @@ func NewTestNetwork(t *testing.T, conf config.Config, l log.Log, size int) []*Te
 		for _, a := range apps {
 			a.Cleanup(ctx)
 		}
+		time.Sleep(time.Second * 5)
 	})
 
 	for i := 0; i < size; i++ {

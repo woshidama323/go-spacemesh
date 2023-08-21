@@ -3,6 +3,8 @@ package node
 import (
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -17,6 +19,9 @@ import (
 )
 
 func TestPeerInfoApi(t *testing.T) {
+	// t.Cleanup(func(){
+	// 	goleak.VerifyNone(t)
+	// })
 	cfg := config.DefaultTestConfig()
 	cfg.P2P.DisableNatPort = true
 	cfg.P2P.Listen = "/ip4/127.0.0.1/tcp/0"
@@ -76,4 +81,14 @@ func getPeerInfo(peers []*pb.PeerInfo, id peer.ID) *pb.PeerInfo {
 		}
 	}
 	return nil
+}
+
+func TestDeleting(t *testing.T) {
+	d := t.TempDir()
+	name := filepath.Join(d, "temp")
+	f, err := os.Create(name)
+	require.NoError(t, err)
+	defer f.Close()
+	err = os.Remove(name)
+	require.NoError(t, err)
 }

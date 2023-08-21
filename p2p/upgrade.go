@@ -264,6 +264,7 @@ func (fh *Host) Stop() error {
 	if err := fh.Host.Close(); err != nil {
 		return fmt.Errorf("failed to close libp2p host: %w", err)
 	}
+	println("======================================================== host closed")
 	lp2plog.SetPrimaryCore(zapcore.NewNopCore())
 	return nil
 }
