@@ -84,6 +84,7 @@ type Builder struct {
 	initialPost      *types.Post
 	initialPostInfo  *types.PostInfo
 	validator        nipostValidator
+	certifier        certifierService
 
 	// smeshingMutex protects `StartSmeshing` and `StopSmeshing` from concurrent access
 	smeshingMutex sync.Mutex
@@ -313,6 +314,8 @@ func (b *Builder) run(ctx context.Context) {
 	for {
 		err := b.generateInitialPost(ctx)
 		if err == nil {
+			// TODO certify initial post
+			// b.certifier.CertifyAll()
 			break
 		}
 		b.log.Error("Failed to generate initial proof: %s", err)
@@ -550,7 +553,7 @@ func (b *Builder) poetRoundStart(epoch types.EpochID) time.Time {
 func (b *Builder) createAtx(ctx context.Context, challenge *types.NIPostChallenge) (*types.ActivationTx, error) {
 	pubEpoch := challenge.PublishEpoch
 
-	nipost, err := b.nipostBuilder.BuildNIPost(ctx, challenge)
+	nipost, err := b.nipostBuilder.BuildNIPost(ctx, challenge, b.certifier)
 	if err != nil {
 		return nil, fmt.Errorf("build NIPost: %w", err)
 	}
