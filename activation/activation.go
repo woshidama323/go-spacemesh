@@ -90,12 +90,14 @@ type Builder struct {
 	smeshingMutex sync.Mutex
 
 	// pendingATX is created with current commitment and nipost from current challenge.
-	pendingATX        *types.ActivationTx
-	layerClock        layerClock
-	syncer            syncer
-	log               log.Logger
-	parentCtx         context.Context
-	stop              context.CancelFunc
+	pendingATX *types.ActivationTx
+	layerClock layerClock
+	syncer     syncer
+	log        log.Log
+	parentCtx  context.Context
+	stop       context.CancelFunc
+
+	poets             []PoetClient
 	poetCfg           PoetConfig
 	poetRetryInterval time.Duration
 }
@@ -122,6 +124,12 @@ func WithContext(ctx context.Context) BuilderOption {
 func WithPoetConfig(c PoetConfig) BuilderOption {
 	return func(b *Builder) {
 		b.poetCfg = c
+	}
+}
+
+func WithPoets(poets ...PoetClient) BuilderOption {
+	return func(b *Builder) {
+		b.poets = poets
 	}
 }
 
@@ -314,8 +322,9 @@ func (b *Builder) run(ctx context.Context) {
 	for {
 		err := b.generateInitialPost(ctx)
 		if err == nil {
-			// TODO certify initial post
-			// b.certifier.CertifyAll()
+			client := NewCertifierClient(b.log.Zap(), b.initialPost, b.initialPostInfo)
+			b.certifier = NewCertifier(b.nipostBuilder.DataDir(), b.log.Zap(), client)
+			b.certifier.CertifyAll(ctx, b.poets)
 			break
 		}
 		b.log.Error("Failed to generate initial proof: %s", err)

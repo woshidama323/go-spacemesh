@@ -60,6 +60,8 @@ func TestValidator_Validate(t *testing.T) {
 		WithPhaseShift(poetCfg.PhaseShift),
 		WithCycleGap(poetCfg.CycleGap),
 	)
+	client, err := activation.NewHTTPPoetClient(poetProver.RestURL().String(), poetCfg)
+	require.NoError(t, err)
 
 	mclock := activation.NewMocklayerClock(ctrl)
 	mclock.EXPECT().LayerToTime(gomock.Any()).AnyTimes().DoAndReturn(
@@ -95,12 +97,12 @@ func TestValidator_Validate(t *testing.T) {
 	nb, err := activation.NewNIPostBuilder(
 		poetDb,
 		svc,
-		[]string{poetProver.RestURL().String()},
 		t.TempDir(),
 		logtest.New(t, zapcore.DebugLevel),
 		sig,
 		poetCfg,
 		mclock,
+		activation.WithPoetClients(client),
 	)
 	require.NoError(t, err)
 
@@ -109,7 +111,8 @@ func TestValidator_Validate(t *testing.T) {
 	}
 	challengeHash := challenge.Hash()
 
-	certifier := activation.NewCertifier(t.TempDir(), logger, post, info)
+	certifierClient := activation.NewCertifierClient(zaptest.NewLogger(t), post, info)
+	certifier := activation.NewCertifier(t.TempDir(), logger, certifierClient)
 	nipost, err := nb.BuildNIPost(context.Background(), &challenge, certifier)
 	require.NoError(t, err)
 
