@@ -316,15 +316,69 @@ func (b *Builder) generateInitialPost(ctx context.Context) error {
 	return nil
 }
 
+// Obtain certificates for the poets.
+// We want to certify immediately after the startup or creating the initial POST
+// to avoid all nodes spamming the certifier at the same time when
+// submitting to the poets.
+//
+// New nodes should call it after the initial POST is created.
+func (b *Builder) certifyPost(ctx context.Context) {
+	post, meta, err := b.obtainPostForCertification()
+	if err != nil {
+		b.log.With().Error("failed to obtain post for certification", log.Err(err))
+	}
+
+	client := NewCertifierClient(b.log.Zap(), post, meta)
+	b.certifier = NewCertifier(b.nipostBuilder.DataDir(), b.log.Zap(), client)
+	b.certifier.CertifyAll(ctx, b.poets)
+}
+
+func (b *Builder) obtainPostForCertification() (*types.Post, *types.PostInfo, error) {
+	var (
+		post *types.Post
+		meta *types.PostInfo
+	)
+
+	if b.initialPost != nil {
+		b.log.Info("certifying using the initial post")
+		return b.initialPost, b.initialPostInfo, nil
+	}
+
+	b.log.Info("certifying using an existing ATX")
+	atxid, err := atxs.GetFirstIDByNodeID(b.cdb, b.SmesherID())
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot certify - no existing ATX found: %w", err)
+	}
+	atx, err := b.cdb.GetFullAtx(atxid)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot certify - failed to retrieve ATX: %w", err)
+	}
+	var commitmentAtx *types.ATXID
+	if commitmentAtx = atx.CommitmentATX; commitmentAtx == nil {
+		atx, err := atxs.CommitmentATX(b.cdb, b.SmesherID())
+		if err != nil {
+			return nil, nil, fmt.Errorf("cannot determine own commitment ATX: %w", err)
+		}
+		commitmentAtx = &atx
+	}
+	post = atx.NIPost.Post
+	meta = &types.PostInfo{
+		NodeID:        b.SmesherID(),
+		CommitmentATX: *commitmentAtx,
+		Nonce:         atx.VRFNonce,
+		NumUnits:      atx.NumUnits,
+		LabelsPerUnit: atx.NIPost.PostMetadata.LabelsPerUnit,
+	}
+
+	return post, meta, nil
+}
+
 func (b *Builder) run(ctx context.Context) {
 	defer b.log.Info("atx builder stopped")
 
 	for {
 		err := b.generateInitialPost(ctx)
 		if err == nil {
-			client := NewCertifierClient(b.log.Zap(), b.initialPost, b.initialPostInfo)
-			b.certifier = NewCertifier(b.nipostBuilder.DataDir(), b.log.Zap(), client)
-			b.certifier.CertifyAll(ctx, b.poets)
 			break
 		}
 		b.log.Error("Failed to generate initial proof: %s", err)
@@ -335,6 +389,8 @@ func (b *Builder) run(ctx context.Context) {
 		case <-b.layerClock.AwaitLayer(currentLayer.Add(1)):
 		}
 	}
+
+	b.certifyPost(ctx)
 
 	for {
 		ctx := log.WithNewSessionID(ctx)
