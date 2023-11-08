@@ -1140,7 +1140,7 @@ func TestBuilder_InitialProofGeneratedOnce(t *testing.T) {
 func TestBuilder_ObtainPostForCertification(t *testing.T) {
 	t.Run("no POST or ATX - fail", func(t *testing.T) {
 		tab := newTestBuilder(t)
-		_, _, err := tab.obtainPostForCertification()
+		_, _, _, err := tab.obtainPostForCertification()
 		require.Error(t, err)
 	})
 	t.Run("initial POST available", func(t *testing.T) {
@@ -1148,8 +1148,9 @@ func TestBuilder_ObtainPostForCertification(t *testing.T) {
 		tab.mpostClient.EXPECT().Proof(gomock.Any(), shared.ZeroChallenge).Return(&types.Post{}, &types.PostInfo{}, nil)
 		require.NoError(t, tab.generateInitialPost(context.Background()))
 
-		_, _, err := tab.obtainPostForCertification()
+		_, _, ch, err := tab.obtainPostForCertification()
 		require.NoError(t, err)
+		require.EqualValues(t, shared.ZeroChallenge, ch)
 	})
 	t.Run("initial POST unavailable but ATX exists", func(t *testing.T) {
 		tab := newTestBuilder(t)
@@ -1162,13 +1163,17 @@ func TestBuilder_ObtainPostForCertification(t *testing.T) {
 			CommitmentATX:  &commitmentAtxId,
 			InitialPost:    &types.Post{},
 		}
-		nipost := newNIPostWithChallenge(t, types.HexToHash32("55555"), []byte("66666"))
-		nipost.Post = &types.Post{
-			Nonce:   5,
-			Indices: []byte{1, 2, 3, 4},
-			Pow:     7,
+		nipost := &types.NIPost{
+			Post: &types.Post{
+				Nonce:   5,
+				Indices: []byte{1, 2, 3, 4},
+				Pow:     7,
+			},
+			PostMetadata: &types.PostMetadata{
+				Challenge:     []byte("66666"),
+				LabelsPerUnit: 777,
+			},
 		}
-		nipost.PostMetadata.LabelsPerUnit = 777
 		atx := types.NewActivationTx(challenge, types.Address{}, nipost, 2, nil)
 		atx.SetEffectiveNumUnits(2)
 		atx.SetReceived(time.Now())
@@ -1177,12 +1182,13 @@ func TestBuilder_ObtainPostForCertification(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, atxs.Add(tab.cdb, vAtx))
 
-		post, meta, err := tab.obtainPostForCertification()
+		post, meta, ch, err := tab.obtainPostForCertification()
 		require.NoError(t, err)
 		require.Equal(t, commitmentAtxId, meta.CommitmentATX)
 		require.Equal(t, uint32(2), meta.NumUnits)
 		require.Equal(t, tab.nodeID, meta.NodeID)
 		require.Equal(t, uint64(777), meta.LabelsPerUnit)
+		require.Equal(t, nipost.PostMetadata.Challenge, ch)
 		require.Equal(t, nipost.Post, post)
 	})
 }
