@@ -34,7 +34,7 @@ func (h *handler) Parse(host core.Host, method uint8, decoder *scale.Decoder) (o
 	return h.multisig.Parse(host, method, decoder)
 }
 
-// New instatiates vesting state, note that the state is the same as multisig.
+// New instantiates vesting state, note that the state is the same as multisig.
 // The difference is that vesting supports one more transaction type.
 func (h *handler) New(args any) (core.Template, error) {
 	template, err := h.multisig.New(args)
@@ -44,7 +44,7 @@ func (h *handler) New(args any) (core.Template, error) {
 	return &Vesting{MultiSig: template.(*multisig.MultiSig)}, nil
 }
 
-// Load instnatiates vesting state from stored state. See comment on New.
+// Load instantiates vesting state from stored state. See comment on New.
 func (h *handler) Load(state []byte) (core.Template, error) {
 	template, err := h.multisig.Load(state)
 	if err != nil {

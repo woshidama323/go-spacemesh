@@ -39,7 +39,7 @@ func (*handler) Parse(host core.Host, method uint8, decoder *scale.Decoder) (out
 	return output, nil
 }
 
-// New instatiates single sig wallet with spawn arguments.
+// New instantiates single sig wallet with spawn arguments.
 func (*handler) New(args any) (core.Template, error) {
 	return New(args.(*SpawnArguments)), nil
 }
