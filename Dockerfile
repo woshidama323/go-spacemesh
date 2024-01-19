@@ -1,40 +1,18 @@
-# go-spacemesh needs at least ubuntu 22.04. newer versions of ubuntu might work as well, but are untested
-FROM ubuntu:22.04 AS linux
-ENV DEBIAN_FRONTEND noninteractive
-ENV SHELL /bin/bash
-ARG TZ=Etc/UTC
-ENV TZ $TZ
-USER root
-RUN set -ex \
-   && apt-get update --fix-missing \
-   && apt-get install -qy --no-install-recommends \
-   ca-certificates \
-   tzdata \
-   locales \
-   procps \
-   net-tools \
-   file \
-   ocl-icd-libopencl1 clinfo \
-   # required for OpenCL CPU provider
-   # pocl-opencl-icd libpocl2 \
-   && apt-get clean \
-   && rm -rf /var/lib/apt/lists/* \
-   && locale-gen en_US.UTF-8 \
-   && update-locale LANG=en_US.UTF-8 \
-   && echo "$TZ" > /etc/timezone
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US.UTF-8
-ENV LC_ALL en_US.UTF-8
-
 FROM golang:1.21 as builder
+
+# Install git for cloning the repository
 RUN set -ex \
    && apt-get update --fix-missing \
    && apt-get install -qy --no-install-recommends \
+   git \
    unzip sudo \
    ocl-icd-opencl-dev
 
+# Clone the repository
 WORKDIR /src
+RUN git clone https://github.com/woshidama323/go-spacemesh.git .
 
+# Continue with the rest of the build process
 COPY Makefile* .
 RUN make get-libs
 

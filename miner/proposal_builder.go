@@ -401,6 +401,9 @@ func (pb *ProposalBuilder) UpdateActiveSet(epoch types.EpochID, activeSet []type
 }
 
 func (pb *ProposalBuilder) initSharedData(ctx context.Context, lid types.LayerID) error {
+	pb.logger.With().Info("Topblocks: initSharedData start",
+		pb.shared.epoch.Field(),
+	)
 	if pb.shared.epoch != lid.GetEpoch() {
 		pb.shared = sharedSession{epoch: lid.GetEpoch()}
 	}
@@ -415,6 +418,9 @@ func (pb *ProposalBuilder) initSharedData(ctx context.Context, lid types.LayerID
 		return nil
 	}
 
+	pb.logger.With().Info("Topblocks: fallbackActiveSet start",
+		pb.shared.epoch.Field(),
+	)
 	if weight, set, err := pb.fallbackActiveSet(pb.shared.epoch); err == nil {
 		pb.logger.With().Info("using fallback active set",
 			pb.shared.epoch,
@@ -428,6 +434,9 @@ func (pb *ProposalBuilder) initSharedData(ctx context.Context, lid types.LayerID
 		return nil
 	}
 
+	pb.logger.With().Info("Topblocks: generateActiveSet start",
+		pb.shared.epoch.Field(),
+	)
 	weight, set, err := generateActiveSet(
 		pb.logger,
 		pb.cdb,
@@ -542,7 +551,7 @@ func (pb *ProposalBuilder) build(ctx context.Context, lid types.LayerID) error {
 		eg.Go(func() error {
 			if err := pb.initSignerData(ctx, ss, lid); err != nil {
 				if errors.Is(err, errAtxNotAvailable) {
-					ss.log.With().Debug("smesher doesn't have atx that targets this epoch",
+					ss.log.With().Info("smesher doesn't have atx that targets this epoch",
 						log.Context(ctx), ss.session.epoch.Field(),
 					)
 				} else {
@@ -568,12 +577,12 @@ func (pb *ProposalBuilder) build(ctx context.Context, lid types.LayerID) error {
 	any := false
 	for _, ss := range signers {
 		if n := len(ss.session.eligibilities.proofs[lid]); n == 0 {
-			ss.log.With().Debug("not eligible for proposal in layer",
+			ss.log.With().Info("not eligible for proposal in layer",
 				log.Context(ctx),
 				lid.Field(), lid.GetEpoch().Field())
 			continue
 		} else {
-			ss.log.With().Debug("eligible for proposals in layer",
+			ss.log.With().Info("eligible for proposals in layer",
 				log.Context(ctx),
 				lid.Field(), log.Int("num proposals", n),
 			)
@@ -603,12 +612,12 @@ func (pb *ProposalBuilder) build(ctx context.Context, lid types.LayerID) error {
 	for _, ss := range signers {
 		proofs := ss.session.eligibilities.proofs[lid]
 		if len(proofs) == 0 {
-			ss.log.With().Debug("not eligible for proposal in layer",
+			ss.log.With().Info("not eligible for proposal in layer",
 				log.Context(ctx),
 				lid.Field(), lid.GetEpoch().Field())
 			continue
 		}
-		ss.log.With().Debug("eligible for proposals in layer",
+		ss.log.With().Info("eligible for proposals in layer",
 			log.Context(ctx),
 			lid.Field(), log.Int("num proposals", len(proofs)),
 		)
